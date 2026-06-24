@@ -67,6 +67,7 @@ const testCases = [
   { input: 'AB 1Z3 CD', expected: 'AB123CD', desc: 'Número leído como letra (Z -> 2)' },
   { input: 'AB 123 C0', expected: 'AB123CO', desc: 'Letra leída como número (0 -> O)' },
   { input: 'AB 12S CD', expected: 'AB125CD', desc: 'Número leído como letra (S -> 5)' },
+  { input: 'AB 1G3 CD', expected: 'AB103CD', desc: 'Número leído como letra en Mercosur (G -> 0)' },
   { input: 'A8 1Z3 CD', expected: 'AB123CD', desc: 'Múltiples errores (8->B, Z->2)' },
   { input: 'MERCOSUR\nAB 123 CD\nTOYOTA', expected: 'AB123CD', desc: 'Mercosur con ruido de portapatente y marca' }
 ];

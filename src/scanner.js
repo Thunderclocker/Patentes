@@ -107,7 +107,14 @@ function tryCorrectPlate(candidate) {
         const char = candidate[i];
         const expected = item.types[i];
         if (expected === 'D') {
-          corrected += LETTER_TO_DIGIT[char] || char;
+          // El cero ('0') del formato Mercosur posee cortes stencil (gaps)
+          // que el OCR de Google suele interpretar como una 'G' (letra).
+          // Para Mercosur/Moto corregimos 'G' a '0'. Para Legacy se mantiene '6'.
+          if ((item.name === 'MERCOSUR' || item.name === 'MOTO') && char === 'G') {
+            corrected += '0';
+          } else {
+            corrected += LETTER_TO_DIGIT[char] || char;
+          }
         } else {
           corrected += DIGIT_TO_LETTER[char] || char;
         }
