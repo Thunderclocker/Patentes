@@ -443,8 +443,7 @@
                     placeholder.classList.add('hidden');
                 }
 
-                actualizarEstadoScan('Escaneo automático activo');
-                iniciarAutoScan();
+                actualizarEstadoScan('Listo para escanear');
             } catch (e) {
                 console.error(e);
                 cameraActiva = false;
@@ -475,12 +474,10 @@
                 await iniciarCamara();
             } else {
                 placeholder.classList.add('hidden');
-                RondaScanner.stopAutoScan();
-                actualizarEstadoScan('Reescaneando...');
-                iniciarAutoScan();
+                actualizarEstadoScan('Listo para escanear');
             }
 
-            mostrarToast('Reescaneando patente...');
+            mostrarToast('Formulario de escaneo reiniciado');
         }
 
         // Reloj en tiempo real
@@ -581,23 +578,20 @@
             btn.classList.add('opacity-60');
             laser.classList.remove('hidden');
             resultBox.classList.add('hidden');
-            RondaScanner.stopAutoScan();
+            actualizarEstadoScan('Escaneando...');
 
             try {
                 const result = await RondaScanner.recognizePlateFromVideo(video, canvas);
                 if (result.plate) {
                     aplicarPatenteDetectada(result);
                 } else {
-                    const raw = RondaScanner.getLastRawText();
-                    mostrarToast('Sin patente. Lectura: ' + (raw ? raw.slice(0, 30) : 'vacío'));
-                    actualizarEstadoScan('Sin patente detectada, reintentando...');
-                    iniciarAutoScan();
+                    mostrarToast('No se detectó patente');
+                    actualizarEstadoScan('Listo para escanear');
                 }
             } catch (e) {
                 console.error(e);
                 mostrarToast('Error de escaneo: ' + (e.message || e));
-                actualizarEstadoScan('Error, reintentando...');
-                iniciarAutoScan();
+                actualizarEstadoScan('Listo para escanear');
             } finally {
                 laser.classList.add('hidden');
                 escaneando = false;
@@ -632,7 +626,6 @@
                     video.classList.remove('hidden');
                 }
                 placeholder.classList.add('hidden');
-                iniciarAutoScan();
             } else {
                 placeholder.classList.remove('hidden');
             }
