@@ -59,7 +59,7 @@
                 <i data-lucide="car" class="w-6 h-6"></i>
             </div>
             <div>
-                <h1 class="font-bold text-lg leading-tight tracking-wide">Ronda de Estacionamiento</h1>
+                <h1 class="font-bold text-lg leading-tight tracking-wide">EstacionaScan</h1>
                 <p class="text-xs text-amber-500 font-medium">Control de Patentes y Ubicación</p>
             </div>
         </div>
@@ -428,13 +428,29 @@
                     // para resolver el bug donde el diálogo de permisos bloquea la surface nativa
                     if (primerInicio) {
                         primerInicio = false;
-                        reintentoTimer = setTimeout(async () => {
-                            reintentoTimer = null;
-                            if (cameraActiva) {
-                                console.log('Reiniciando preview nativa (primer inicio)...');
-                                await forzarReinicioPreview(box);
+                        
+                        let yaTienePermiso = false;
+                        try {
+                            const status = await navigator.permissions.query({ name: 'camera' });
+                            if (status && status.state === 'granted') {
+                                yaTienePermiso = true;
                             }
-                        }, 1500);
+                        } catch (err) {
+                            console.warn('Error al consultar permisos de cámara:', err);
+                        }
+
+                        if (!yaTienePermiso) {
+                            console.log('Permiso de cámara no detectado, programando reinicio de preview...');
+                            reintentoTimer = setTimeout(async () => {
+                                reintentoTimer = null;
+                                if (cameraActiva) {
+                                    console.log('Reiniciando preview nativa (primer inicio)...');
+                                    await forzarReinicioPreview(box);
+                                }
+                            }, 1500);
+                        } else {
+                            console.log('Permiso de cámara ya concedido, omitiendo reinicio.');
+                        }
                     }
                 } else {
                     cameraStream = await RondaScanner.startCameraWeb(video);
@@ -869,7 +885,7 @@
                 worksheet['!cols'] = Object.keys(max_lens).map(col => ({ wch: max_lens[col] }));
 
                 const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Ronda Estacionamiento");
+                XLSX.utils.book_append_sheet(workbook, worksheet, "EstacionaScan");
 
                 // Generar los bytes del archivo XLSX
                 const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
@@ -877,7 +893,7 @@
 
                 const hoy = new Date();
                 const fechaString = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
-                const nombreArchivo = `ronda_estacionamiento_${fechaString}.xlsx`;
+                const nombreArchivo = `estacionascan_${fechaString}.xlsx`;
 
                 // Método Nativo para Android (Capacitor)
                 if (window.RondaFilesystem && window.RondaShare) {

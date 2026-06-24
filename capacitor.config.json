@@ -1,6 +1,6 @@
 {
   "appId": "com.estacionamiento.ronda",
-  "appName": "Ronda Estacionamiento",
+  "appName": "EstacionaScan",
   "webDir": "www",
   "android": {
     "allowMixedContent": false
