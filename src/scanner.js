@@ -96,35 +96,33 @@ function tryCorrectPlate(candidate) {
   const group = PATTERNS[len];
   if (!group) return candidate;
 
-  let bestPattern = null;
-  let minMismatches = 999;
+  let bestCorrected = candidate;
+  let bestScore = 0;
 
   for (const item of group) {
     const mismatches = getMismatchCount(candidate, item.types);
-    if (mismatches < minMismatches) {
-      minMismatches = mismatches;
-      bestPattern = item;
-    }
-  }
-
-  // Corregimos caracteres sólo si hay un error de 1 o 2 caracteres tipográficos
-  if (bestPattern && minMismatches <= 2) {
-    let corrected = '';
-    for (let i = 0; i < len; i++) {
-      const char = candidate[i];
-      const expected = bestPattern.types[i];
-      if (expected === 'D') {
-        corrected += LETTER_TO_DIGIT[char] || char;
-      } else {
-        corrected += DIGIT_TO_LETTER[char] || char;
+    if (mismatches <= 2) {
+      let corrected = '';
+      for (let i = 0; i < len; i++) {
+        const char = candidate[i];
+        const expected = item.types[i];
+        if (expected === 'D') {
+          corrected += LETTER_TO_DIGIT[char] || char;
+        } else {
+          corrected += DIGIT_TO_LETTER[char] || char;
+        }
+      }
+      if (item.pattern.test(corrected)) {
+        const score = scorePlate(corrected);
+        if (score > bestScore) {
+          bestScore = score;
+          bestCorrected = corrected;
+        }
       }
     }
-    if (bestPattern.pattern.test(corrected)) {
-      return corrected;
-    }
   }
 
-  return candidate;
+  return bestScore > 0 ? bestCorrected : candidate;
 }
 
 // Texto basura frecuente en portapatentes y marcos
