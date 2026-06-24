@@ -352,14 +352,9 @@ async function ensureOcrWorker() {
 }
 
 async function captureNativeFrame() {
-  // Usar capture() en vez de captureSample() para obtener foto real del sensor a máxima resolución
-  try {
-    const photo = await CameraPreview.capture({ quality: 90 });
-    if (photo?.value) return photo.value;
-  } catch {
-    /* fallback a captureSample si capture() no está disponible */
-  }
-  const sample = await CameraPreview.captureSample({ quality: 90 });
+  // Usamos captureSample() porque es extremadamente rápido (10ms), silencioso
+  // y previene las caídas por falta de memoria (OOM) al no cargar imágenes de 12MP+ del sensor.
+  const sample = await CameraPreview.captureSample({ quality: 85 });
   if (!sample?.value) {
     throw new Error('No se pudo capturar frame de cámara');
   }
