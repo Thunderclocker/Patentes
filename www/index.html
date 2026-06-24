@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Estacionamiento Profesional</title>
+    <!-- Tailwind CSS local para diseño premium offline -->
+    <script src="assets/tailwind.min.js"></script>
+    
+    <!-- Lucide Icons local para interfaz limpia offline -->
+    <script src="assets/lucide.min.js"></script>
+    <!-- SheetJS local para exportar a Excel real (.xlsx) offline -->
+    <script src="assets/xlsx.full.min.js"></script>
+    <style>
+        /* La etiqueta html siempre es transparente por debajo para evitar pantalla blanca nativa */
+        html {
+            background-color: transparent !important;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        }
+        /* Soporte para transparencia de cámara nativa */
+        body.camera-active, 
+        body.camera-active main,
+        body.camera-active #scanner-section {
+            background-color: transparent !important;
+            background: transparent !important;
+        }
+        /* Agujero transparente para cámara nativa detrás del WebView */
+        #camera-preview-box {
+            background: transparent !important;
+        }
+        body.camera-active #camera-preview-box {
+            box-shadow: 0 0 0 9999px #020617 !important;
+        }
+        #camera-preview-box .scan-overlay {
+            pointer-events: none;
+        }
+        #camera-preview-box button {
+            pointer-events: auto;
+        }
+        /* Ocultar flechas del input number en varios navegadores */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
+
+    <!-- CABECERA -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="bg-amber-500 text-slate-950 p-2 rounded-xl flex items-center justify-center">
+                <i data-lucide="car" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide">Ronda de Estacionamiento</h1>
+                <p class="text-xs text-amber-500 font-medium">Control de Patentes y Ubicación</p>
+            </div>
+        </div>
+        <div id="live-clock" class="text-xs bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/50 font-mono text-slate-400">
+            00:00:00
+        </div>
+    </header>
+
+    <!-- CUERPO PRINCIPAL -->
+    <main class="max-w-2xl w-full mx-auto p-4 md:p-6 space-y-6 flex-grow">
+
+        <!-- NOTIFICACIONES/TOASTS -->
+        <div id="toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-6 py-3 rounded-full shadow-lg flex items-center gap-2 transition-all duration-300 transform translate-y-2 opacity-0">
+            <i data-lucide="check-circle" class="w-5 h-5"></i>
+            <span id="toast-message">Registro guardado con éxito</span>
+        </div>
+
+        <!-- SECCIÓN 1: CÁMARA & ESCANEO SIMULADO -->
+        <section id="scanner-section" class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl relative">
+            <h2 class="text-xs font-bold tracking-wider text-slate-400 uppercase mb-3 flex items-center gap-2 relative z-10">
+                <i data-lucide="scan-eye" class="w-4 h-4 text-amber-500"></i> Escáner de Patentes
+            </h2>
+            
+            <!-- Visor de cámara en vivo -->
+            <div id="camera-preview-box" class="relative z-0 w-full h-52 rounded-2xl border-2 border-dashed border-amber-500/60 flex flex-col items-center justify-center overflow-hidden group">
+                <video id="camera-preview" class="absolute inset-0 w-full h-full object-cover hidden z-0" autoplay playsinline muted></video>
+                <canvas id="capture-canvas" class="hidden"></canvas>
+                <div class="scan-overlay absolute inset-0 z-10">
+                <!-- Botón de Linterna Flotante -->
+                <button id="btn-linterna" onclick="toggleLinterna()" class="absolute top-3 right-3 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-amber-400 p-2.5 rounded-xl border border-slate-700/50 transition-all z-20 flex items-center justify-center shadow-lg" title="Encender Linterna">
+                    <i data-lucide="flashlight" class="w-5 h-5"></i>
+                </button>
+ 
+                <!-- Líneas de enfoque de cámara -->
+                <div class="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-amber-500 rounded-tl"></div>
+                <div class="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-amber-500 rounded-tr"></div>
+                <div class="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-amber-500 rounded-bl"></div>
+                <div class="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-amber-500 rounded-br"></div>
+                
+                <!-- Animación del Láser de Escaneo -->
+                <div id="scanner-laser" class="hidden absolute left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent shadow-[0_0_15px_#f59e0b] animate-[bounce_2s_infinite]"></div>
+ 
+                <!-- Contenido interactivo del visor -->
+                <div id="scanner-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center space-y-2 px-4 bg-slate-950/80 z-30 transition-all duration-300">
+                    <i data-lucide="camera" class="w-10 h-10 text-slate-400 mx-auto animate-pulse"></i>
+                    <p class="text-xs text-slate-300 font-medium">Encuadrá la patente dentro del recuadro</p>
+                    <p id="scan-status" class="text-[10px] text-amber-400 font-semibold">Iniciando cámara...</p>
+                    <button type="button" onclick="iniciarCamara()" class="mt-2 text-[11px] font-bold text-amber-500 underline pointer-events-auto">Activar cámara</button>
+                </div>
+ 
+                <!-- Vista de Patente Escaneada -->
+                <div id="scanner-result-box" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/75 z-30 text-center space-y-1">
+                    <span class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Patente Identificada</span>
+                    <div class="bg-white text-slate-950 font-bold px-4 py-2 rounded-md border-2 border-slate-400 text-2xl tracking-widest font-mono shadow-inner select-none flex items-center gap-2 justify-center">
+                        <span id="scanner-result-plate">-- --- --</span>
+                    </div>
+                </div>
+                </div>
+            </div>
+ 
+            <!-- Botones de Acción de Escaneo -->
+            <div class="mt-4 flex gap-3 relative z-10">
+                <button id="btn-escanear" onclick="escanearPatente()" class="flex-grow bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-amber-500/10">
+                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+                    Escanear ahora
+                </button>
+                <button id="btn-refrescar-ocr" onclick="reiniciarEscaneo()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-3.5 rounded-xl transition-all" title="Reescanear patente">
+                    <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 2: FORMULARIO DE CARGA -->
+        <section class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-5 relative z-10">
+            <h2 class="text-xs font-bold tracking-wider text-slate-400 uppercase border-b border-slate-800 pb-2">Datos del Vehículo</h2>
+
+            <!-- Input Patente (Editable por si falla) -->
+            <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-400 flex justify-between">
+                    <span>Patente</span>
+                    <span class="text-slate-500">(Tipear si el escaneo falla)</span>
+                </label>
+                <div class="relative">
+                    <input type="text" id="input-patente" placeholder="Auto, moto — automático" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 px-4 text-lg font-mono font-bold tracking-widest text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors uppercase">
+                    <div class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
+                        <i data-lucide="file-text" class="w-5 h-5"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selector de Pisos (EP, P1, P2, P3, P4) -->
+            <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-400">Seleccionar Piso</label>
+                <div class="grid grid-cols-5 gap-2.5">
+                    <button type="button" onclick="seleccionarPiso('EP')" id="btn-piso-EP" class="btn-piso bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-300 font-bold py-3.5 rounded-xl transition-all active:scale-95 text-center">EP</button>
+                    <button type="button" onclick="seleccionarPiso('P1')" id="btn-piso-P1" class="btn-piso bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-300 font-bold py-3.5 rounded-xl transition-all active:scale-95 text-center">P1</button>
+                    <button type="button" onclick="seleccionarPiso('P2')" id="btn-piso-P2" class="btn-piso bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-300 font-bold py-3.5 rounded-xl transition-all active:scale-95 text-center">P2</button>
+                    <button type="button" onclick="seleccionarPiso('P3')" id="btn-piso-P3" class="btn-piso bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-300 font-bold py-3.5 rounded-xl transition-all active:scale-95 text-center">P3</button>
+                    <button type="button" onclick="seleccionarPiso('P4')" id="btn-piso-P4" class="btn-piso bg-slate-950 border border-slate-800 hover:border-amber-500/50 text-slate-300 font-bold py-3.5 rounded-xl transition-all active:scale-95 text-center">P4</button>
+                </div>
+            </div>
+
+            <!-- Dársena y Modelo -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Dársena (manual con autoincremento) -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-semibold text-slate-400">Dársena</label>
+                        <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 cursor-pointer select-none">
+                            <input type="checkbox" id="chk-auto-darsena" checked class="w-3.5 h-3.5 rounded border-slate-800 bg-slate-950 text-amber-500 focus:ring-amber-500/50 focus:ring-offset-slate-900 focus:ring-1">
+                            <span>Autoincrementar</span>
+                        </label>
+                    </div>
+                    <div class="relative">
+                        <input type="number" id="input-darsena" placeholder="Ej: 14" min="1" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 px-4 text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors font-bold text-lg">
+                        <div class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
+                            <i data-lucide="hash" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modelo / Marca -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-slate-400">Modelo / Marca</label>
+                    <div class="relative">
+                        <input type="text" id="input-modelo" placeholder="Ej: Cronos" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 px-4 text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors font-medium">
+                        <div class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
+                            <i data-lucide="car-front" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selector de Color Visual / Inteligente -->
+            <div class="space-y-2">
+                <label class="text-xs font-semibold text-slate-400 flex justify-between">
+                    <span>Color del Vehículo</span>
+                    <span id="selected-color-label" class="text-amber-500 font-medium font-mono text-[11px] uppercase tracking-wider">Gris</span>
+                </label>
+                <!-- Grilla de Colores Rápidos -->
+                <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                    <!-- Blanco -->
+                    <button type="button" onclick="seleccionarColor('Blanco')" id="color-btn-Blanco" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-white border border-slate-400 shadow-inner"></span>
+                        <span class="text-[10px] font-bold text-slate-400">Blanco</span>
+                    </button>
+                    <!-- Gris -->
+                    <button type="button" onclick="seleccionarColor('Gris')" id="color-btn-Gris" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-slate-500 shadow-inner"></span>
+                        <span class="text-[10px] font-bold text-slate-400">Gris</span>
+                    </button>
+                    <!-- Negro -->
+                    <button type="button" onclick="seleccionarColor('Negro')" id="color-btn-Negro" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-black border border-slate-800 shadow-inner"></span>
+                        <span class="text-[10px] font-bold text-slate-400">Negro</span>
+                    </button>
+                    <!-- Plateado -->
+                    <button type="button" onclick="seleccionarColor('Plateado')" id="color-btn-Plateado" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-gradient-to-tr from-slate-400 to-slate-200 shadow-inner"></span>
+                        <span class="text-[10px] font-bold text-slate-400">Plata</span>
+                    </button>
+                    <!-- Rojo -->
+                    <button type="button" onclick="seleccionarColor('Rojo')" id="color-btn-Rojo" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-red-600 shadow-inner"></span>
+                        <span class="text-[10px] font-bold text-slate-400">Rojo</span>
+                    </button>
+                    <!-- Azul -->
+                    <button type="button" onclick="seleccionarColor('Azul')" id="color-btn-Azul" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-blue-600 shadow-inner"></span>
+                        <span class="text-[10px] font-bold text-slate-400">Azul</span>
+                    </button>
+                    <!-- Otro / Personalizado -->
+                    <button type="button" onclick="seleccionarColor('Otro', true)" id="color-btn-Otro" class="color-chip group bg-slate-950 border border-slate-800 hover:border-slate-600 p-2.5 rounded-xl flex flex-col items-center gap-1 transition-all">
+                        <span class="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white text-[9px] font-bold shadow-inner">+</span>
+                        <span class="text-[10px] font-bold text-slate-400">Otro</span>
+                    </button>
+                </div>
+
+                <!-- Input Dinámico para "Otro" Color (Oculto por defecto) -->
+                <div id="wrapper-input-color-otro" class="hidden mt-2.5 transition-all duration-300">
+                    <div class="relative">
+                        <input type="text" id="input-color-otro" placeholder="Especificar otro color (Ej: Verde, Champagne...)" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors text-sm font-medium">
+                        <div class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botón Principal de Guardado -->
+            <button onclick="guardarRegistro()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-lg shadow-blue-600/10 text-base">
+                <i data-lucide="save" class="w-5 h-5"></i>
+                GUARDAR REGISTRO
+            </button>
+        </section>
+
+        <!-- SECCIÓN 3: HISTORIAL DE LA RONDA -->
+        <section class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4 relative z-10">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h2 class="text-xs font-bold tracking-wider text-slate-400 uppercase flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4 text-slate-500"></i>
+                    <span>Autos Registrados (<span id="count-registros">0</span>)</span>
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button onclick="exportarExcel()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
+                        Exportar Excel
+                    </button>
+                    <button onclick="nuevaRonda()" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 text-rose-200 text-xs font-bold py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95" title="Iniciar Nueva Ronda (Borra los registros locales)">
+                        <i data-lucide="trash-2" class="w-4 h-4 text-rose-400"></i>
+                        Nueva Ronda
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabla responsiva para tabletas y celulares -->
+            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-[10px] tracking-wider text-slate-400 uppercase bg-slate-900/50">
+                            <th class="p-3">Fecha / Hora</th>
+                            <th class="p-3">Patente</th>
+                            <th class="p-3">Ubicación</th>
+                            <th class="p-3">Vehículo</th>
+                            <th class="p-3 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-registros" class="divide-y divide-slate-900 text-sm">
+                        <!-- Carga dinámica -->
+                        <tr id="sin-registros">
+                            <td colspan="5" class="p-8 text-center text-slate-600">
+                                <i data-lucide="info" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+                                No hay autos registrados todavía en esta ronda.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER / ESTADO OFFLINE -->
+    <footer class="bg-slate-950 border-t border-slate-900 px-6 py-4 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2 relative z-10">
+        <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Escáner y linterna activos · Datos locales</span>
+        </div>
+        <div>
+            <span>Diseñado para Operaciones de Seguridad y Control</span>
+        </div>
+    </footer>
+
+    <!-- LÓGICA DE CONTROL DE LA APLICACIÓN -->
+    <script src="assets/scanner.bundle.js"></script>
+    <script>
+        // Inicializar iconos de Lucide
+        lucide.createIcons();
+
+        // Variables de estado interno
+        let registros = JSON.parse(localStorage.getItem('ronda_estacionamiento')) || [];
+        let pisoSeleccionado = 'EP'; // Seleccionado por defecto
+        let colorSeleccionado = 'Gris'; // Gris seleccionado por defecto
+        let esColorOtro = false;
+        let linternaEncendida = false;
+        let cameraStream = null;
+        let cameraActiva = false;
+        let escaneando = false;
+        let primerInicio = true;
+        let reintentoTimer = null;
+
+        function actualizarEstadoScan(msg) {
+            const el = document.getElementById('scan-status');
+            if (el) el.innerText = msg;
+        }
+
+        window.onload = function() {
+            actualizarReloj();
+            setInterval(actualizarReloj, 1000);
+            seleccionarPiso('EP');
+            seleccionarColor('Gris');
+            renderizarRegistros();
+            setTimeout(() => {
+                iniciarCamara();
+                RondaScanner.preloadOcr();
+            }, 400);
+
+            // Manejo de estado de la aplicación para ahorrar batería
+            document.addEventListener('pause', () => {
+                console.log('App en segundo plano, liberando cámara...');
+                if (reintentoTimer) { clearTimeout(reintentoTimer); reintentoTimer = null; }
+                if (cameraActiva) {
+                    RondaScanner.stopAutoScan();
+                    const video = document.getElementById('camera-preview');
+                    RondaScanner.stopCamera(cameraStream, video).then(() => {
+                        cameraStream = null;
+                        cameraActiva = false;
+                        document.body.classList.remove('camera-active');
+                    });
+                }
+            });
+
+            document.addEventListener('resume', () => {
+                console.log('App en primer plano, reestableciendo cámara...');
+                iniciarCamara();
+            });
+        };
+
+        function aplicarPatenteDetectada(result) {
+            const resultBox = document.getElementById('scanner-result-box');
+            const plateText = document.getElementById('scanner-result-plate');
+            const inputPatente = document.getElementById('input-patente');
+            const placeholder = document.getElementById('scanner-placeholder');
+
+            plateText.innerText = result.display;
+            resultBox.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            inputPatente.value = result.plate;
+            actualizarEstadoScan('Patente detectada');
+            mostrarToast('Patente detectada: ' + result.plate);
+        }
+
+        function iniciarAutoScan() {
+            const video = document.getElementById('camera-preview');
+            const canvas = document.getElementById('capture-canvas');
+            RondaScanner.startAutoScan(video, canvas, aplicarPatenteDetectada, actualizarEstadoScan);
+        }
+
+        // Fuerza un reinicio de la preview nativa para asegurar que la surface se renderice
+        async function forzarReinicioPreview(box) {
+            try {
+                await RondaScanner.stopCamera(null, null);
+                await new Promise(r => setTimeout(r, 300));
+                await RondaScanner.startCameraPreview(box);
+                console.log('Preview reiniciada correctamente');
+            } catch (e) {
+                console.warn('Reintento de preview:', e);
+            }
+        }
+
+        async function iniciarCamara() {
+            const video = document.getElementById('camera-preview');
+            const canvas = document.getElementById('capture-canvas');
+            const box = document.getElementById('camera-preview-box');
+            const placeholder = document.getElementById('scanner-placeholder');
+
+            if (reintentoTimer) { clearTimeout(reintentoTimer); reintentoTimer = null; }
+
+            try {
+                actualizarEstadoScan('Abriendo cámara...');
+                if (cameraActiva) {
+                    RondaScanner.stopAutoScan();
+                    await RondaScanner.stopCamera(cameraStream, video);
+                    cameraStream = null;
+                    cameraActiva = false;
+                    document.body.classList.remove('camera-active');
+                }
+
+                const esNativo = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+                if (esNativo) {
+                    document.body.classList.add('camera-active');
+                    await RondaScanner.startCameraPreview(box);
+                    cameraActiva = true;
+                    placeholder.classList.add('hidden');
+
+                    // En el primer inicio, forzar reinicio de preview después de 1.5s
+                    // para resolver el bug donde el diálogo de permisos bloquea la surface nativa
+                    if (primerInicio) {
+                        primerInicio = false;
+                        reintentoTimer = setTimeout(async () => {
+                            reintentoTimer = null;
+                            if (cameraActiva) {
+                                console.log('Reiniciando preview nativa (primer inicio)...');
+                                await forzarReinicioPreview(box);
+                            }
+                        }, 1500);
+                    }
+                } else {
+                    cameraStream = await RondaScanner.startCameraWeb(video);
+                    cameraActiva = true;
+                    video.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                }
+
+                actualizarEstadoScan('Escaneo automático activo');
+                iniciarAutoScan();
+            } catch (e) {
+                console.error(e);
+                cameraActiva = false;
+                document.body.classList.remove('camera-active');
+                actualizarEstadoScan('Error: permití acceso a cámara');
+                mostrarToast('Permiso de cámara requerido');
+
+                // Si falla en el primer inicio (permisos), reintentar automáticamente en 2s
+                if (primerInicio) {
+                    primerInicio = false;
+                    reintentoTimer = setTimeout(() => {
+                        reintentoTimer = null;
+                        console.log('Reintentando iniciar cámara tras error de permisos...');
+                        iniciarCamara();
+                    }, 2000);
+                }
+            }
+        }
+
+        async function reiniciarEscaneo() {
+            const resultBox = document.getElementById('scanner-result-box');
+            const placeholder = document.getElementById('scanner-placeholder');
+
+            document.getElementById('input-patente').value = '';
+            resultBox.classList.add('hidden');
+
+            if (!cameraActiva) {
+                await iniciarCamara();
+            } else {
+                placeholder.classList.add('hidden');
+                RondaScanner.stopAutoScan();
+                actualizarEstadoScan('Reescaneando...');
+                iniciarAutoScan();
+            }
+
+            mostrarToast('Reescaneando patente...');
+        }
+
+        // Reloj en tiempo real
+        function actualizarReloj() {
+            const ahora = new Date();
+            const horas = String(ahora.getHours()).padStart(2, '0');
+            const minutos = String(ahora.getMinutes()).padStart(2, '0');
+            const segundos = String(ahora.getSeconds()).padStart(2, '0');
+            document.getElementById('live-clock').innerText = `${horas}:${minutos}:${segundos}`;
+        }
+
+        async function toggleLinterna() {
+            linternaEncendida = !linternaEncendida;
+            const btn = document.getElementById('btn-linterna');
+
+            if (linternaEncendida) {
+                btn.classList.remove('bg-slate-800/80', 'text-slate-300', 'border-slate-700/50');
+                btn.classList.add('bg-amber-500', 'text-slate-950', 'border-amber-400', 'shadow-[0_0_15px_rgba(245,158,11,0.5)]');
+                const ok = await RondaScanner.setFlashlight(true, cameraStream);
+                mostrarToast(ok ? 'Linterna encendida' : 'Linterna no disponible');
+                if (!ok) linternaEncendida = false;
+            } else {
+                btn.classList.remove('bg-amber-500', 'text-slate-950', 'border-amber-400', 'shadow-[0_0_15px_rgba(245,158,11,0.5)]');
+                btn.classList.add('bg-slate-800/80', 'text-slate-300', 'border-slate-700/50');
+                await RondaScanner.setFlashlight(false, cameraStream);
+                mostrarToast('Linterna apagada');
+            }
+        }
+
+        // Selección visual de Pisos
+        function seleccionarPiso(piso) {
+            pisoSeleccionado = piso;
+            // Remover estilos de todos
+            document.querySelectorAll('.btn-piso').forEach(btn => {
+                btn.classList.remove('bg-amber-500', 'text-slate-950', 'border-amber-500');
+                btn.classList.add('bg-slate-950', 'text-slate-300', 'border-slate-800');
+            });
+            // Aplicar estilo al seleccionado
+            const btnActivo = document.getElementById(`btn-piso-${piso}`);
+            if (btnActivo) {
+                btnActivo.classList.remove('bg-slate-950', 'text-slate-300', 'border-slate-800');
+                btnActivo.classList.add('bg-amber-500', 'text-slate-950', 'border-amber-500', 'shadow-md', 'shadow-amber-500/10');
+            }
+        }
+
+        // Selección de Color de forma visual
+        function seleccionarColor(color, esOtro = false) {
+            colorSeleccionado = color;
+            esColorOtro = esOtro;
+
+            // Desmarcar todos los chips de colores
+            document.querySelectorAll('.color-chip').forEach(btn => {
+                btn.classList.remove('border-amber-500', 'bg-slate-900/60', 'scale-[1.03]');
+                btn.classList.add('border-slate-800', 'bg-slate-950');
+            });
+
+            // Marcar chip activo
+            const btnActivo = document.getElementById(`color-btn-${color}`);
+            if (btnActivo) {
+                btnActivo.classList.remove('border-slate-800', 'bg-slate-950');
+                btnActivo.classList.add('border-amber-500', 'bg-slate-900/60', 'scale-[1.03]');
+            }
+
+            // Mostrar u ocultar el input de color personalizado
+            const inputOtroWrapper = document.getElementById('wrapper-input-color-otro');
+            const labelColor = document.getElementById('selected-color-label');
+
+            if (esOtro) {
+                inputOtroWrapper.classList.remove('hidden');
+                labelColor.innerText = "Otro Personalizado";
+                document.getElementById('input-color-otro').focus();
+            } else {
+                inputOtroWrapper.classList.add('hidden');
+                labelColor.innerText = color;
+            }
+        }
+
+
+        async function escanearPatente() {
+            if (escaneando) return;
+
+            const laser = document.getElementById('scanner-laser');
+            const resultBox = document.getElementById('scanner-result-box');
+            const video = document.getElementById('camera-preview');
+            const canvas = document.getElementById('capture-canvas');
+            const btn = document.getElementById('btn-escanear');
+
+            if (!cameraActiva) {
+                await iniciarCamara();
+            }
+            if (!cameraActiva) {
+                mostrarToast('Activá la cámara para escanear');
+                return;
+            }
+
+            escaneando = true;
+            btn.disabled = true;
+            btn.classList.add('opacity-60');
+            laser.classList.remove('hidden');
+            resultBox.classList.add('hidden');
+            RondaScanner.stopAutoScan();
+
+            try {
+                const result = await RondaScanner.recognizePlateFromVideo(video, canvas);
+                if (result.plate) {
+                    aplicarPatenteDetectada(result);
+                } else {
+                    const raw = RondaScanner.getLastRawText();
+                    mostrarToast('Sin patente. Lectura: ' + (raw ? raw.slice(0, 30) : 'vacío'));
+                    actualizarEstadoScan('Sin patente detectada, reintentando...');
+                    iniciarAutoScan();
+                }
+            } catch (e) {
+                console.error(e);
+                mostrarToast('Error de escaneo: ' + (e.message || e));
+                actualizarEstadoScan('Error, reintentando...');
+                iniciarAutoScan();
+            } finally {
+                laser.classList.add('hidden');
+                escaneando = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-60');
+            }
+        }
+
+        // Dar formato visual a las patentes
+        function formatearPatenteDisplay(patente) {
+            if (patente.length === 7) {
+                return `${patente.substring(0, 2)} ${patente.substring(2, 5)} ${patente.substring(5, 7)}`;
+            } else if (patente.length === 6) {
+                return `${patente.substring(0, 3)} ${patente.substring(3, 6)}`;
+            }
+            return patente;
+        }
+
+        // Limpiar formulario manual
+        function limpiarCampos() {
+            document.getElementById('input-patente').value = '';
+            document.getElementById('input-modelo').value = '';
+            document.getElementById('input-color-otro').value = '';
+            document.getElementById('input-darsena').value = '';
+            document.getElementById('scanner-result-box').classList.add('hidden');
+
+            const video = document.getElementById('camera-preview');
+            const placeholder = document.getElementById('scanner-placeholder');
+            if (cameraActiva) {
+                const esNativo = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+                if (!esNativo) {
+                    video.classList.remove('hidden');
+                }
+                placeholder.classList.add('hidden');
+                iniciarAutoScan();
+            } else {
+                placeholder.classList.remove('hidden');
+            }
+
+            // NO se resetea el piso actual para evitar que el guardia tenga que tocar el piso de nuevo en cada dársena
+            seleccionarColor('Gris'); // Reset color a Gris
+        }
+
+        // Guardar Datos en Base Local (In-Memory / LocalStorage)
+        function guardarRegistro() {
+            const patente = document.getElementById('input-patente').value.trim().toUpperCase();
+            const darsena = document.getElementById('input-darsena').value.trim();
+            const modelo = document.getElementById('input-modelo').value.trim();
+            
+            // Determinar color definitivo a guardar
+            let colorDefinitivo = colorSeleccionado;
+            if (esColorOtro) {
+                const otroColorVal = document.getElementById('input-color-otro').value.trim();
+                colorDefinitivo = otroColorVal ? otroColorVal : 'Otro';
+            }
+
+            if (!patente) {
+                mostrarToast("La patente es obligatoria");
+                document.getElementById('input-patente').focus();
+                return;
+            }
+
+            if (!modelo) {
+                mostrarToast("El modelo/marca es obligatorio");
+                document.getElementById('input-modelo').focus();
+                return;
+            }
+
+            if (!darsena) {
+                mostrarToast("Indicá el número de dársena");
+                document.getElementById('input-darsena').focus();
+                return;
+            }
+
+            // Validar que la dársena sea numérica estricta y mayor a 0
+            const darsenaNum = parseInt(darsena);
+            if (isNaN(darsenaNum) || darsenaNum < 1) {
+                mostrarToast("La dársena debe ser un número válido");
+                document.getElementById('input-darsena').focus();
+                return;
+            }
+
+            const ahora = new Date();
+            // Formato de fecha local argentino (DD/MM/YYYY)
+            const fechaString = `${String(ahora.getDate()).padStart(2, '0')}/${String(ahora.getMonth() + 1).padStart(2, '0')}/${ahora.getFullYear()}`;
+            const horaString = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+            const nuevoRegistro = {
+                id: Date.now(),
+                fecha: fechaString,
+                hora: horaString,
+                patente: patente,
+                piso: pisoSeleccionado,
+                darsena: darsena,
+                modelo: modelo,
+                color: colorDefinitivo
+            };
+
+            registros.unshift(nuevoRegistro); // Insertar al inicio de la lista
+            localStorage.setItem('ronda_estacionamiento', JSON.stringify(registros));
+
+            // Feedback visual de éxito
+            mostrarToast("Guardado en Dársena " + darsena);
+            renderizarRegistros();
+
+            // Calcular siguiente dársena antes de limpiar campos
+            const chkAuto = document.getElementById('chk-auto-darsena');
+            let siguienteDarsena = '';
+            if (chkAuto && chkAuto.checked) {
+                const darsenaNum = parseInt(darsena);
+                if (!isNaN(darsenaNum)) {
+                    siguienteDarsena = darsenaNum + 1;
+                }
+            }
+
+            limpiarCampos();
+
+            if (siguienteDarsena !== '') {
+                document.getElementById('input-darsena').value = siguienteDarsena;
+            }
+        }
+
+        // Renderizar la tabla de registros guardados
+        function renderizarRegistros() {
+            const tabla = document.getElementById('tabla-registros');
+            const countLabel = document.getElementById('count-registros');
+            
+            // Vaciar tabla
+            tabla.innerHTML = '';
+            countLabel.innerText = registros.length;
+
+            if (registros.length === 0) {
+                tabla.innerHTML = `
+                    <tr id="sin-registros">
+                        <td colspan="5" class="p-8 text-center text-slate-600">
+                            <i data-lucide="info" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+                            No hay autos registrados todavía en esta ronda.
+                        </td>
+                    </tr>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            // Mostrar un máximo de 100 registros para garantizar rendimiento fluido en móviles (60 FPS)
+            const registrosAMostrar = registros.slice(0, 100);
+            registrosAMostrar.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-900/40 transition-colors border-b border-slate-900";
+                
+                // Fallbacks seguros de parseo
+                const fechaDisplay = item.fecha ? item.fecha : '--/--/----';
+                const colorDisplay = item.color ? item.color : 'Sin color';
+
+                tr.innerHTML = `
+                    <td class="p-3 font-mono text-xs">
+                        <div class="text-slate-300 font-medium">${fechaDisplay}</div>
+                        <div class="text-[10px] text-slate-500">${item.hora}</div>
+                    </td>
+                    <td class="p-3 font-mono font-bold tracking-wider">${formatearPatenteDisplay(item.patente)}</td>
+                    <td class="p-3">
+                        <span class="inline-flex items-center px-2 py-1 rounded bg-slate-800 text-xs font-semibold text-slate-300">
+                            ${item.piso} - D. ${item.darsena}
+                        </span>
+                    </td>
+                    <td class="p-3">
+                        <div class="text-slate-200 text-xs font-medium truncate max-w-[120px]">${item.modelo}</div>
+                        <div class="text-[10px] text-slate-500">${colorDisplay}</div>
+                    </td>
+                    <td class="p-3 text-right">
+                        <button onclick="eliminarRegistro(${item.id})" class="text-rose-500 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-colors">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tabla.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Eliminar fila de la lista
+        function eliminarRegistro(id) {
+            registros = registros.filter(item => item.id !== id);
+            localStorage.setItem('ronda_estacionamiento', JSON.stringify(registros));
+            renderizarRegistros();
+            mostrarToast("Registro eliminado");
+        }
+
+        // Exportar a archivo Excel XLSX usando SheetJS
+        async function exportarExcel() {
+            if (registros.length === 0) {
+                mostrarToast("No hay registros para exportar");
+                return;
+            }
+
+            // Crear matriz de datos con cabeceras formateadas
+            const data = registros.map(item => ({
+                "Fecha": item.fecha ? item.fecha : '',
+                "Hora": item.hora,
+                "Patente": item.patente,
+                "Piso": item.piso,
+                "Dársena": item.darsena,
+                "Modelo": item.modelo,
+                "Color": item.color ? item.color : 'Sin color'
+            }));
+
+            try {
+                // Crear el libro de trabajo de SheetJS
+                const worksheet = XLSX.utils.json_to_sheet(data);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Ronda Estacionamiento");
+
+                // Generar los bytes del archivo XLSX
+                const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                const hoy = new Date();
+                const fechaString = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+                const nombreArchivo = `ronda_estacionamiento_${fechaString}.xlsx`;
+
+                // Método Nativo para Android (Capacitor)
+                if (window.RondaFilesystem && window.RondaShare) {
+                    try {
+                        const bytes = new Uint8Array(wbout);
+                        let binary = '';
+                        const len = bytes.byteLength;
+                        for (let i = 0; i < len; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        const base64Data = window.btoa(binary);
+
+                        let writeResult;
+                        try {
+                            // Intentar escribir directamente en la carpeta pública de Documentos
+                            writeResult = await window.RondaFilesystem.writeFile({
+                                path: nombreArchivo,
+                                data: base64Data,
+                                directory: window.RondaDirectory.Documents,
+                                recursive: true
+                            });
+                            mostrarToast("Guardado en Documentos");
+                        } catch (docErr) {
+                            console.warn("Fallo guardado en Documentos, usando caché:", docErr);
+                            // Fallback seguro a la carpeta caché de la app
+                            writeResult = await window.RondaFilesystem.writeFile({
+                                path: nombreArchivo,
+                                data: base64Data,
+                                directory: window.RondaDirectory.Cache,
+                                recursive: true
+                            });
+                        }
+
+                        // Compartir o Guardar en Descargas usando el diálogo nativo de Android
+                        await window.RondaShare.share({
+                            title: nombreArchivo,
+                            url: writeResult.uri,
+                            dialogTitle: 'Guardar o Compartir Excel'
+                        });
+                        return;
+                    } catch (nativeErr) {
+                        console.error("Error en flujo nativo de exportación:", nativeErr);
+                    }
+                }
+
+                // Fallback web de navegador estándar (por si se ejecuta en navegador de PC)
+                if (navigator.share) {
+                    try {
+                        const archivo = new File([blob], nombreArchivo, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                        if (!navigator.canShare || navigator.canShare({ files: [archivo] })) {
+                            await navigator.share({ files: [archivo], title: nombreArchivo });
+                            mostrarToast("Excel compartido");
+                            return;
+                        }
+                    } catch (e) {
+                        const msg = (e && e.message) ? e.message : String(e);
+                        if (msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('cancel')) return;
+                    }
+                }
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", nombreArchivo);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                mostrarToast("Excel Descargado");
+            } catch (e) {
+                console.error(e);
+                mostrarToast("Error al exportar a Excel");
+            }
+        }
+
+        // Iniciar nueva ronda limpiando los registros locales
+        function nuevaRonda() {
+            if (registros.length === 0) {
+                mostrarToast("El historial ya está vacío");
+                return;
+            }
+            if (confirm("¿Estás seguro de iniciar una nueva ronda?\nEsto borrará todos los registros guardados en esta pantalla de forma permanente.")) {
+                registros = [];
+                localStorage.removeItem('ronda_estacionamiento');
+                renderizarRegistros();
+                mostrarToast("¡Nueva ronda iniciada!");
+            }
+        }
+
+        // Función del cartel de alerta personalizado
+        function mostrarToast(mensaje) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            
+            toastMessage.innerText = mensaje;
+            toast.classList.remove('hidden');
+            
+            // Animación Entrada
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+                toast.classList.add('translate-y-0', 'opacity-100');
+            }, 10);
+
+            // Desvanecer después de 2.5 segundos
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 300);
+            }, 2500);
+        }
+    </script>
+</body>
+</html>

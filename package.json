@@ -1,0 +1,28 @@
+{
+  "name": "ronda-estacionamiento",
+  "version": "2.1.0",
+  "description": "Control de estacionamiento - APK Android con OCR ML Kit y linterna",
+  "scripts": {
+    "build:web": "node scripts/prepare-www.js",
+    "cap:sync": "npm run build:web && npx cap sync android",
+    "cap:open": "npx cap open android",
+    "android:build": "cd android && ./gradlew assembleDebug",
+    "android:apk": "npm run cap:sync && npm run android:build"
+  },
+  "dependencies": {
+    "@capacitor-community/camera-preview": "^7.0.5",
+    "@capacitor/android": "^7.2.0",
+    "@capacitor/core": "^7.2.0",
+    "@capacitor/filesystem": "^7.1.8",
+    "@capacitor/share": "^7.0.4",
+    "@capgo/capacitor-flash": "^7.1.23",
+    "@pantrist/capacitor-plugin-ml-kit-text-recognition": "^7.0.0",
+    "tesseract.js": "^6.0.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.2.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "esbuild": "^0.25.0"
+  }
+}

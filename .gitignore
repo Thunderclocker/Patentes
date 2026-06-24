@@ -1,0 +1,19 @@
+# Dependencias
+node_modules/
+
+# Android build
+android/.gradle/
+android/app/build/
+android/build/
+android/.idea/
+.tools/
+android/local.properties
+*.apk
+*.aab
+
+# Capacitor
+.capacitor/
+
+# OS
+.DS_Store
+Thumbs.db
