@@ -41,7 +41,7 @@ function copyTesseractAssets() {
 }
 
 function copyExcelAssets() {
-  const xlsxSrc = path.join(root, 'node_modules', 'xlsx', 'dist', 'xlsx.full.min.js');
+  const xlsxSrc = path.join(root, 'node_modules', 'xlsx-js-style', 'dist', 'xlsx.min.js');
   const xlsxDest = path.join(root, 'www', 'assets', 'xlsx.full.min.js');
   copyFile(xlsxSrc, xlsxDest);
 }

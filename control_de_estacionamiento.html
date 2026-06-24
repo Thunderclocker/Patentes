@@ -801,6 +801,73 @@
             try {
                 // Crear el libro de trabajo de SheetJS
                 const worksheet = XLSX.utils.json_to_sheet(data);
+
+                // Estilos para cabecera y celdas
+                const headerStyle = {
+                    fill: {
+                        patternType: "solid",
+                        fgColor: { rgb: "FFFF00" } // Amarillo
+                    },
+                    font: {
+                        bold: true,
+                        color: { rgb: "000000" },
+                        name: "Calibri",
+                        sz: 11
+                    },
+                    alignment: {
+                        horizontal: "center",
+                        vertical: "center"
+                    },
+                    border: {
+                        top: { style: "thin", color: { rgb: "000000" } },
+                        bottom: { style: "thin", color: { rgb: "000000" } },
+                        left: { style: "thin", color: { rgb: "000000" } },
+                        right: { style: "thin", color: { rgb: "000000" } }
+                    }
+                };
+
+                const dataStyle = {
+                    font: {
+                        name: "Calibri",
+                        sz: 11
+                    },
+                    alignment: {
+                        vertical: "center"
+                    },
+                    border: {
+                        top: { style: "thin", color: { rgb: "D1D5DB" } },
+                        bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+                        left: { style: "thin", color: { rgb: "D1D5DB" } },
+                        right: { style: "thin", color: { rgb: "D1D5DB" } }
+                    }
+                };
+
+                // Aplicar estilos a todas las celdas
+                const range = XLSX.utils.decode_range(worksheet['!ref']);
+                for (let r = range.s.r; r <= range.e.r; ++r) {
+                    for (let c = range.s.c; c <= range.e.c; ++c) {
+                        const cell_ref = XLSX.utils.encode_cell({ c: c, r: r });
+                        if (!worksheet[cell_ref]) {
+                            worksheet[cell_ref] = { t: 's', v: '' };
+                        }
+                        if (r === 0) {
+                            worksheet[cell_ref].s = headerStyle;
+                        } else {
+                            worksheet[cell_ref].s = dataStyle;
+                        }
+                    }
+                }
+
+                // Ajustar el ancho de las columnas de forma automática
+                const max_lens = {};
+                for (let cell in worksheet) {
+                    if (cell[0] === '!') continue;
+                    const val = String(worksheet[cell].v || '');
+                    const col = cell.replace(/[0-9]/g, '');
+                    max_lens[col] = Math.max(max_lens[col] || 10, val.length + 3);
+                }
+                worksheet['!cols'] = Object.keys(max_lens).map(col => ({ wch: max_lens[col] }));
+
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Ronda Estacionamiento");
 
