@@ -82,6 +82,29 @@ function getMismatchCount(str, types) {
   return mismatches;
 }
 
+function getCorrectionCost(char, expected, isMercosurStyle) {
+  const isDigit = /\d/.test(char);
+  const isLetter = /[A-Z]/.test(char);
+  if (expected === 'D' && isDigit) return 0;
+  if (expected === 'L' && isLetter) return 0;
+
+  if (expected === 'D') {
+    // Letter to Digit
+    if (isMercosurStyle && char === 'G') return 1; // Stencil zero correction
+    if (char === 'O' || char === 'Q' || char === 'D' || char === 'C') return 1;
+    if (char === 'I' || char === 'L') return 1;
+    if (char === 'Z') return 1;
+    if (char === 'S' || char === '$') return 1;
+    if (char === 'G' || char === 'b') return 1; // G -> 6 for Legacy
+    if (char === 'B') return 1;
+    return 4; // Any other conversion is less likely (e.g. A -> 4)
+  } else {
+    // Digit to Letter
+    if (char === '0' || char === '1' || char === '2' || char === '5' || char === '6' || char === '8') return 1;
+    return 4;
+  }
+}
+
 function tryCorrectPlate(candidate) {
   if (!candidate) return candidate;
   const len = candidate.length;
@@ -97,12 +120,15 @@ function tryCorrectPlate(candidate) {
   if (!group) return candidate;
 
   let bestCorrected = candidate;
-  let bestScore = 0;
+  let bestScore = -999;
 
   for (const item of group) {
     const mismatches = getMismatchCount(candidate, item.types);
     if (mismatches <= 2) {
       let corrected = '';
+      let totalCost = 0;
+      const isMercosurStyle = (item.name === 'MERCOSUR' || item.name === 'MOTO');
+
       for (let i = 0; i < len; i++) {
         const char = candidate[i];
         const expected = item.types[i];
@@ -110,26 +136,37 @@ function tryCorrectPlate(candidate) {
           // El cero ('0') del formato Mercosur posee cortes stencil (gaps)
           // que el OCR de Google suele interpretar como una 'G' (letra).
           // Para Mercosur/Moto corregimos 'G' a '0'. Para Legacy se mantiene '6'.
-          if ((item.name === 'MERCOSUR' || item.name === 'MOTO') && char === 'G') {
+          if (isMercosurStyle && char === 'G') {
             corrected += '0';
           } else {
             corrected += LETTER_TO_DIGIT[char] || char;
           }
+          const finalChar = isMercosurStyle && char === 'G' ? '0' : LETTER_TO_DIGIT[char] || char;
+          if (char !== finalChar) {
+            totalCost += getCorrectionCost(char, expected, isMercosurStyle);
+          }
         } else {
           corrected += DIGIT_TO_LETTER[char] || char;
+          const finalChar = DIGIT_TO_LETTER[char] || char;
+          if (char !== finalChar) {
+            totalCost += getCorrectionCost(char, expected, isMercosurStyle);
+          }
         }
       }
+
       if (item.pattern.test(corrected)) {
-        const score = scorePlate(corrected);
-        if (score > bestScore) {
-          bestScore = score;
+        const baseScore = scorePlate(corrected);
+        // Descontamos del score base según los costos de correcciones realizadas
+        const finalScore = baseScore - (totalCost * 5);
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
           bestCorrected = corrected;
         }
       }
     }
   }
 
-  return bestScore > 0 ? bestCorrected : candidate;
+  return bestScore > -999 ? bestCorrected : candidate;
 }
 
 // Texto basura frecuente en portapatentes y marcos

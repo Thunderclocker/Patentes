@@ -69,7 +69,15 @@ const testCases = [
   { input: 'AB 12S CD', expected: 'AB125CD', desc: 'Número leído como letra (S -> 5)' },
   { input: 'AB 1G3 CD', expected: 'AB103CD', desc: 'Número leído como letra en Mercosur (G -> 0)' },
   { input: 'A8 1Z3 CD', expected: 'AB123CD', desc: 'Múltiples errores (8->B, Z->2)' },
-  { input: 'MERCOSUR\nAB 123 CD\nTOYOTA', expected: 'AB123CD', desc: 'Mercosur con ruido de portapatente y marca' }
+  { input: 'MERCOSUR\nAB 123 CD\nTOYOTA', expected: 'AB123CD', desc: 'Mercosur con ruido de portapatente y marca' },
+
+  // ==========================================
+  // FORMATO MOTOS (Mercosur: A000AAA / Legacy: 123AAA)
+  // ==========================================
+  { input: 'A 023 AAA', expected: 'A023AAA', desc: 'Moto Mercosur perfecta con espacios' },
+  { input: 'A G23 AAA', expected: 'A023AAA', desc: 'Moto Mercosur con G leída como 0 (A G23 AAA -> A023AAA)' },
+  { input: '123 AAA', expected: '123AAA', desc: 'Moto Legacy perfecta' },
+  { input: '12G AAA', expected: '126AAA', desc: 'Moto Legacy con G leída como 6 (12G AAA -> 126AAA)' }
 ];
 
 console.log('\n==================================================');
