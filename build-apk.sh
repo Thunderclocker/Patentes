@@ -13,8 +13,8 @@ chmod +x gradlew
 
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 if [ -f "$APK" ]; then
-  cp "$APK" "$ROOT/ronda-estacionamiento.apk"
+  cp "$APK" "$ROOT/estacionascan.apk"
   echo ""
-  echo "APK generado: $ROOT/ronda-estacionamiento.apk"
-  ls -lh "$ROOT/ronda-estacionamiento.apk"
+  echo "APK generado: $ROOT/estacionascan.apk"
+  ls -lh "$ROOT/estacionascan.apk"
 fi
