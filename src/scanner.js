@@ -361,6 +361,28 @@ async function captureNativeFrame() {
   return sample.value;
 }
 
+function cropToViewfinder(base64Image) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // Recorte central para coincidir con la máscara de la interfaz (los corchetes amarillos)
+      const cropW = Math.floor(img.width * 0.90);
+      const cropH = Math.floor(img.height * 0.45);
+      const sx = Math.floor((img.width - cropW) / 2);
+      const sy = Math.floor((img.height - cropH) / 2);
+
+      canvas.width = cropW;
+      canvas.height = cropH;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+      resolve(canvasToBase64(canvas));
+    };
+    img.onerror = () => resolve(base64Image);
+    img.src = 'data:image/jpeg;base64,' + base64Image;
+  });
+}
+
 // Preprocesamiento de imagen para mejorar OCR en patentes con bajo contraste
 // (fondo rojo/bordó con letras blancas de las patentes antiguas)
 function preprocessForOcr(base64Image, invert = false) {
@@ -549,9 +571,10 @@ function canvasToBase64(canvas) {
 export async function recognizePlateFromVideo(videoEl, canvasEl) {
   if (previewActive) {
     const base64Raw = await captureNativeFrame();
+    const base64Cropped = await cropToViewfinder(base64Raw);
 
     // Intento 1: imagen con preprocesamiento (escala de grises + alto contraste)
-    const processed = await preprocessForOcr(base64Raw, false);
+    const processed = await preprocessForOcr(base64Cropped, false);
     const result1 = await recognizeWithMlKit(processed);
     if (result1.plate && scorePlate(result1.plate) >= 90) {
       return {
@@ -562,7 +585,7 @@ export async function recognizePlateFromVideo(videoEl, canvasEl) {
     }
 
     // Intento 2: imagen original sin preprocesar (a veces ML Kit lee mejor sin filtros)
-    const result2 = await recognizeWithMlKit(base64Raw);
+    const result2 = await recognizeWithMlKit(base64Cropped);
     if (result2.plate && scorePlate(result2.plate) > scorePlate(result1.plate || '')) {
       return {
         plate: result2.plate,
@@ -573,7 +596,7 @@ export async function recognizePlateFromVideo(videoEl, canvasEl) {
 
     // Intento 3: imagen invertida (para patentes con letras oscuras sobre fondo claro)
     if (!result1.plate && !result2.plate) {
-      const inverted = await preprocessForOcr(base64Raw, true);
+      const inverted = await preprocessForOcr(base64Cropped, true);
       const result3 = await recognizeWithMlKit(inverted);
       if (result3.plate) {
         return {
