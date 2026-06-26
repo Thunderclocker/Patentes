@@ -170,7 +170,7 @@ function tryCorrectPlate(candidate) {
 }
 
 // Texto basura frecuente en portapatentes y marcos
-const NOISE_WORDS = /^(ARGENTINA|REPUBLICA|REPARG|MERCOSUR|MARIANOFF|FORD|FIAT|CHEVROLET|TOYOTA|VOLKSWAGEN|RENAULT|PEUGEOT|CITROEN|HONDA|SUZUKI|YAMAHA|VW|BMW|KIA|AUDI|HYUNDAI|BORA|CORSA|GOL|TITANIUM|TREND|CLASSIC)$/;
+const NOISE_WORDS = /^(ARGENTINA|REPUBLICA|REPARG|MERCOSUR)$/;
 
 function translateSymbols(str) {
   return String(str || '')
