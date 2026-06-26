@@ -410,9 +410,21 @@ function cropToViewfinder(base64Image) {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      // Recorte central para coincidir con la máscara de la interfaz (los corchetes amarillos)
-      const cropW = Math.floor(img.width * 0.90);
-      const cropH = Math.floor(img.height * 0.45);
+      const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+      
+      let cropW, cropH;
+      if (isPortrait) {
+        // En vertical (Portrait): el largo del sensor (img.width) se proyecta en el alto de la pantalla (Y).
+        // El ancho del sensor (img.height) se proyecta en el ancho de la pantalla (X).
+        // Los corchetes amarillos de la UI ocupan el ~90% del ancho de la pantalla y ~18% del alto.
+        cropW = Math.floor(img.width * 0.18);
+        cropH = Math.floor(img.height * 0.90);
+      } else {
+        // En horizontal (Landscape): ejes normales.
+        cropW = Math.floor(img.width * 0.90);
+        cropH = Math.floor(img.height * 0.25);
+      }
+
       const sx = Math.floor((img.width - cropW) / 2);
       const sy = Math.floor((img.height - cropH) / 2);
 
@@ -438,20 +450,47 @@ function preprocessForOcr(base64Image, invert = false) {
       canvas.height = img.height;
       const ctx = canvas.getContext('2d');
 
-      // Paso 1: Dibujar con filtros de escala de grises y alto contraste
+      // Paso 1: Dibujar con filtros de escala de grises y alto contraste nativo si está disponible
       ctx.filter = 'grayscale(100%) contrast(200%) brightness(110%)';
       ctx.drawImage(img, 0, 0);
 
-      // Paso 2: Si se pide invertir, aplicar inversión de colores (para patentes oscuras sobre claro)
-      if (invert) {
+      // Paso 2: Procesar píxeles manualmente para dar soporte robusto a WebViews sin ctx.filter
+      try {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
+        const contrast = 2.0; // 200% contraste
+        const brightness = 25; // +10% brillo
+
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = 255 - data[i];       // R
-          data[i + 1] = 255 - data[i + 1]; // G
-          data[i + 2] = 255 - data[i + 2]; // B
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          // Escala de grises BT.601
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          // Contraste: (gray - 128) * contrast + 128
+          gray = (gray - 128) * contrast + 128;
+
+          // Brillo
+          gray += brightness;
+
+          // Limitar a [0, 255]
+          if (gray < 0) gray = 0;
+          if (gray > 255) gray = 255;
+
+          // Invertir si se solicita (para patentes oscuras sobre claro)
+          if (invert) {
+            gray = 255 - gray;
+          }
+
+          data[i] = gray;
+          data[i + 1] = gray;
+          data[i + 2] = gray;
         }
         ctx.putImageData(imageData, 0, 0);
+      } catch (e) {
+        console.warn('Fallo en preprocesamiento manual de píxeles, usando filtro nativo:', e);
       }
 
       resolve(canvasToBase64(canvas));
@@ -462,9 +501,11 @@ function preprocessForOcr(base64Image, invert = false) {
 }
 
 async function recognizeWithMlKit(base64Image) {
+  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+  const rotationAngle = isPortrait ? 90 : 0;
   const result = await CapacitorPluginMlKitTextRecognition.detectText({
     base64Image: stripBase64(base64Image),
-    rotation: 0,
+    rotation: rotationAngle,
   });
   lastRawText = result.text || '';
   const plate = extractPlateFromMlKitResult(result);
@@ -716,10 +757,22 @@ export function stopAutoScan() {
   autoScanCallback = null;
 }
 
+async function setFocus(x, y) {
+  if (previewActive) {
+    try {
+      await CameraPreview.setFocus({ x, y });
+      return true;
+    } catch (e) {
+      console.warn('Fallo en setFocus del plugin CameraPreview:', e);
+    }
+  }
+  return false;
+}
+
 if (typeof window !== 'undefined') {
   window.RondaFilesystem = Filesystem;
   window.RondaDirectory = Directory;
   window.RondaShare = Share;
 }
 
-export { formatPlateDisplay };
+export { formatPlateDisplay, setFocus };
