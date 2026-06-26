@@ -410,28 +410,68 @@ function cropToViewfinder(base64Image) {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+      const isScreenPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+      const isImagePortrait = img.width < img.height;
       
       let cropW, cropH;
-      if (isPortrait) {
-        // En vertical (Portrait): el largo del sensor (img.width) se proyecta en el alto de la pantalla (Y).
-        // El ancho del sensor (img.height) se proyecta en el ancho de la pantalla (X).
-        // Los corchetes amarillos de la UI ocupan el ~90% del ancho de la pantalla y ~18% del alto.
-        cropW = Math.floor(img.width * 0.18);
-        cropH = Math.floor(img.height * 0.90);
+      let rotateAngle = 0; // 0, 90, 270
+
+      if (isScreenPortrait) {
+        if (isImagePortrait) {
+          // Caso A: Pantalla vertical, Imagen ya vertical (pre-rotada por el plugin)
+          // El visor ocupa el ~90% del ancho y ~22% del alto
+          cropW = Math.floor(img.width * 0.90);
+          cropH = Math.floor(img.height * 0.22);
+          rotateAngle = 0;
+        } else {
+          // Caso B: Pantalla vertical, Imagen horizontal (sensor crudo de cámara)
+          // El ancho del visor en pantalla (90%) mapea al eje Y del sensor (height)
+          // El alto del visor en pantalla (22%) mapea al eje X del sensor (width)
+          cropW = Math.floor(img.width * 0.22);
+          cropH = Math.floor(img.height * 0.90);
+          rotateAngle = 90; // Rotar 90° horario para que la salida quede horizontal
+        }
       } else {
-        // En horizontal (Landscape): ejes normales.
-        cropW = Math.floor(img.width * 0.90);
-        cropH = Math.floor(img.height * 0.25);
+        // Pantalla horizontal (Landscape)
+        if (isImagePortrait) {
+          // Caso C: Pantalla horizontal, Imagen vertical
+          cropW = Math.floor(img.width * 0.25);
+          cropH = Math.floor(img.height * 0.90);
+          rotateAngle = 270;
+        } else {
+          // Caso D: Pantalla horizontal, Imagen horizontal
+          cropW = Math.floor(img.width * 0.90);
+          cropH = Math.floor(img.height * 0.25);
+          rotateAngle = 0;
+        }
       }
 
       const sx = Math.floor((img.width - cropW) / 2);
       const sy = Math.floor((img.height - cropH) / 2);
 
-      canvas.width = cropW;
-      canvas.height = cropH;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+
+      if (rotateAngle === 90) {
+        // Rotar 90° horario: el ancho de la salida es cropH, el alto es cropW
+        canvas.width = cropH;
+        canvas.height = cropW;
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((90 * Math.PI) / 180);
+        ctx.drawImage(img, sx, sy, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
+      } else if (rotateAngle === 270) {
+        // Rotar 270° horario: el ancho de la salida es cropH, el alto es cropW
+        canvas.width = cropH;
+        canvas.height = cropW;
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((270 * Math.PI) / 180);
+        ctx.drawImage(img, sx, sy, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
+      } else {
+        // Sin rotación
+        canvas.width = cropW;
+        canvas.height = cropH;
+        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+      }
+
       resolve(canvasToBase64(canvas));
     };
     img.onerror = () => resolve(base64Image);
@@ -501,11 +541,9 @@ function preprocessForOcr(base64Image, invert = false) {
 }
 
 async function recognizeWithMlKit(base64Image) {
-  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
-  const rotationAngle = isPortrait ? 90 : 0;
   const result = await CapacitorPluginMlKitTextRecognition.detectText({
     base64Image: stripBase64(base64Image),
-    rotation: rotationAngle,
+    rotation: 0, // La imagen recortada por cropToViewfinder ya está rotada y orientada correctamente
   });
   lastRawText = result.text || '';
   const plate = extractPlateFromMlKitResult(result);
