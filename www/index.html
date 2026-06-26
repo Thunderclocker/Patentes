@@ -174,10 +174,10 @@
                         </label>
                     </div>
                     <div class="relative">
-                        <input type="number" id="input-darsena" placeholder="Ej: 14" min="1" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 px-4 text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors font-bold text-lg">
-                        <div class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
-                            <i data-lucide="hash" class="w-4 h-4"></i>
-                        </div>
+                        <input type="number" id="input-darsena" placeholder="Ej: 14" min="0" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 pl-4 pr-24 text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors font-bold text-lg">
+                        <button type="button" onclick="document.getElementById('input-darsena').value = 0" class="absolute right-2.5 top-1/2 -translate-y-1/2 bg-slate-900 hover:bg-slate-800 active:scale-[0.95] text-slate-400 border border-slate-800/80 px-2.5 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all">
+                            Sin N°
+                        </button>
                     </div>
                 </div>
 
@@ -745,9 +745,9 @@
                 return;
             }
 
-            // Validar que la dársena sea numérica estricta y mayor a 0
+            // Validar que la dársena sea numérica estricta y mayor o igual a 0
             const darsenaNum = parseInt(darsena);
-            if (isNaN(darsenaNum) || darsenaNum < 1) {
+            if (isNaN(darsenaNum) || darsenaNum < 0) {
                 mostrarToast("La dársena debe ser un número válido");
                 document.getElementById('input-darsena').focus();
                 return;
@@ -773,7 +773,7 @@
             localStorage.setItem('ronda_estacionamiento', JSON.stringify(registros));
 
             // Feedback visual de éxito
-            mostrarToast("Guardado en Dársena " + darsena);
+            mostrarToast(darsena === '0' ? "Guardado sin dársena" : "Guardado en Dársena " + darsena);
             renderizarRegistros();
 
             // Calcular siguiente dársena antes de limpiar campos
@@ -833,7 +833,7 @@
                     <td class="p-3 font-mono font-bold tracking-wider">${formatearPatenteDisplay(item.patente)}</td>
                     <td class="p-3">
                         <span class="inline-flex items-center px-2 py-1 rounded bg-slate-800 text-xs font-semibold text-slate-300">
-                            ${item.piso} - D. ${item.darsena}
+                            ${item.piso} - ${item.darsena === '0' || item.darsena === 0 ? 'Sin Dársena' : 'D. ' + item.darsena}
                         </span>
                     </td>
                     <td class="p-3">
@@ -873,7 +873,7 @@
                 "Hora": item.hora,
                 "Patente": item.patente,
                 "Piso": item.piso,
-                "Dársena": item.darsena,
+                "Dársena": (item.darsena === '0' || item.darsena === 0) ? "Sin Dársena" : parseInt(item.darsena),
                 "Modelo": item.modelo,
                 "Color": item.color ? item.color : 'Sin color'
             }));
