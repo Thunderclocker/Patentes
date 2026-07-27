@@ -664,8 +664,9 @@
                 if (result.plate) {
                     aplicarPatenteDetectada(result);
                 } else {
-                    mostrarToast('No se detectó patente');
-                    actualizarEstadoScan('Listo para escanear');
+                    const hint = result.rawText ? result.rawText.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+                    mostrarToast(hint ? `No detectada (leyó: ${hint})` : 'No se detectó patente');
+                    actualizarEstadoScan(hint ? `Leyó: ${hint}` : 'Listo para escanear');
                 }
             } catch (e) {
                 console.error(e);
