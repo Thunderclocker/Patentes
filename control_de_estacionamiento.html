@@ -143,10 +143,10 @@
                     <span class="text-slate-500">(Tipear si el escaneo falla)</span>
                 </label>
                 <div class="relative">
-                    <input type="text" id="input-patente" placeholder="Auto, moto — automático" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 px-4 text-lg font-mono font-bold tracking-widest text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors uppercase">
-                    <div class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">
-                        <i data-lucide="file-text" class="w-5 h-5"></i>
-                    </div>
+                    <input type="text" id="input-patente" placeholder="Auto, moto — automático" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 pl-4 pr-32 text-lg font-mono font-bold tracking-widest text-slate-100 placeholder:text-slate-700 focus:outline-none focus:border-amber-500 transition-colors uppercase">
+                    <button type="button" onclick="document.getElementById('input-patente').value = 'SIN PATENTE'" class="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 bg-slate-900 hover:bg-slate-800 active:scale-[0.95] text-amber-500 border border-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all" title="Vehículo sin patente">
+                        Sin Patente
+                    </button>
                 </div>
             </div>
 
