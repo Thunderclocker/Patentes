@@ -17,6 +17,7 @@ let autoScanCallback = null;
 let previewActive = false;
 let useNativePreview = Capacitor.isNativePlatform();
 let lastRawText = '';
+let viewfinderBoxEl = null;
 
 function getAssetBase() {
   const base = document.querySelector('base')?.href || `${window.location.origin}/`;
@@ -209,6 +210,14 @@ function scorePlate(candidate) {
   return 0;
 }
 
+function stripProvincialLetter(candidate) {
+  // NVID601 → NVI601 (letra provincial pegada al bloque numérico)
+  if (/^[A-Z]{4}\d{3}$/.test(candidate)) {
+    return candidate.slice(0, 3) + candidate.slice(4);
+  }
+  return candidate;
+}
+
 function extractPlate(text) {
   if (!text) return null;
 
@@ -228,6 +237,7 @@ function extractPlate(text) {
   // Paso 2: Concatenar partes adyacentes (2 o 3 partes)
   // Ej 2 partes: "NVW" + "345" → "NVW345"
   // Ej 3 partes: "AB" + "123" + "CD" → "AB123CD"
+  // Patentes viejas: "NVI" + "D" + "601" → "NVI601" (la letra provincial va en un círculo)
   for (let i = 0; i < cleanParts.length; i++) {
     const p1 = normalizePlate(cleanParts[i]);
     if (p1.length < 1) continue;
@@ -238,6 +248,10 @@ function extractPlate(text) {
       if (p2.length >= 1 && (p1.length + p2.length >= 5 && p1.length + p2.length <= 8)) {
         sources.push(p1 + p2);
       }
+      // "NVI" + "D601" → "NVI601" (OCR pegó la letra provincial al número)
+      if (/^[A-Z]{3}$/.test(p1) && /^[A-Z]\d{3}$/.test(p2)) {
+        sources.push(p1 + p2.slice(1));
+      }
     }
 
     // Intentar 3 partes
@@ -245,9 +259,14 @@ function extractPlate(text) {
       const p2 = normalizePlate(cleanParts[i + 1]);
       const p3 = normalizePlate(cleanParts[i + 2]);
       if (p2.length >= 1 && p3.length >= 1) {
-        const combinedLength = p1.length + p2.length + p3.length;
-        if (combinedLength >= 6 && combinedLength <= 8) {
-          sources.push(p1 + p2 + p3);
+        // Letra provincial suelta entre LLL y NNN
+        if (/^[A-Z]{3}$/.test(p1) && /^[A-Z]$/.test(p2) && /^\d{3}$/.test(p3)) {
+          sources.push(p1 + p3);
+        } else {
+          const combinedLength = p1.length + p2.length + p3.length;
+          if (combinedLength >= 6 && combinedLength <= 8) {
+            sources.push(p1 + p2 + p3);
+          }
         }
       }
     }
@@ -263,7 +282,8 @@ function extractPlate(text) {
 
     // Para strings cortos (6-7 chars), probar directamente
     if (cleaned.length <= 7) {
-      const corrected = tryCorrectPlate(cleaned);
+      const stripped = stripProvincialLetter(cleaned);
+      const corrected = tryCorrectPlate(stripped);
       const score = scorePlate(corrected);
       if (score > bestScore) {
         bestScore = score;
@@ -328,6 +348,18 @@ function extractPlateFromMlKitResult(result) {
     if (a.length >= 2 && a.length <= 4 && b.length >= 2 && b.length <= 4) {
       chunks.push(a + b);
     }
+    // Legacy: "NVI" + "601"
+    if (/^[A-Z]{3}$/.test(a) && /^\d{3}$/.test(b)) {
+      chunks.push(a + b);
+    }
+    if (/^[A-Z]{3}$/.test(a) && /^[A-Z]\d{3}$/.test(b)) {
+      chunks.push(a + b.slice(1));
+    }
+  }
+
+  if (allLines.length > 0) {
+    chunks.push(allLines.join(''));
+    chunks.push(allLines.join(' '));
   }
 
   let bestPlate = null;
@@ -370,12 +402,110 @@ function stripBase64(dataUrl) {
 
 function getBoxRect(boxEl) {
   const rect = boxEl.getBoundingClientRect();
+  const { width: screenW, height: screenH } = getScreenSize();
+  const vpW = window.visualViewport?.width ?? window.innerWidth;
+  const vpH = window.visualViewport?.height ?? window.innerHeight;
+  const scaleX = screenW / vpW;
+  const scaleY = screenH / vpH;
+  const offsetLeft = window.visualViewport?.offsetLeft ?? 0;
+  const offsetTop = window.visualViewport?.offsetTop ?? 0;
+
   return {
-    x: Math.max(0, Math.round(rect.left)),
-    y: Math.max(0, Math.round(rect.top)),
-    width: Math.max(1, Math.round(rect.width)),
-    height: Math.max(1, Math.round(rect.height)),
+    x: Math.max(0, (rect.left + offsetLeft) * scaleX),
+    y: Math.max(0, (rect.top + offsetTop) * scaleY),
+    width: Math.max(1, rect.width * scaleX),
+    height: Math.max(1, rect.height * scaleY),
   };
+}
+
+// Debe coincidir con CameraPreview.start (pantalla completa nativa).
+function getScreenSize() {
+  return {
+    width: window.screen.width || window.innerWidth,
+    height: window.screen.height || window.innerHeight,
+  };
+}
+
+// Mapea el rectángulo del visor (coordenadas CSS) a un recorte del frame del sensor.
+// La cámara nativa cubre toda la pantalla detrás del WebView (object-fit: cover).
+function mapViewfinderToSensorCrop(img, boxRect) {
+  const { width: screenW, height: screenH } = getScreenSize();
+  const isScreenPortrait = screenH > screenW;
+  const isImageLandscape = img.width > img.height;
+
+  const nx = boxRect.x / screenW;
+  const ny = boxRect.y / screenH;
+  const nw = boxRect.width / screenW;
+  const nh = boxRect.height / screenH;
+
+  // Pequeño margen para tolerar movimiento al encuadrar
+  const pad = 0.06;
+  const padX = Math.max(0, nx - pad * nw);
+  const padY = Math.max(0, ny - pad * nh);
+  const padW = Math.min(1 - padX, nw * (1 + pad * 2));
+  const padH = Math.min(1 - padY, nh * (1 + pad * 2));
+
+  if (isScreenPortrait && isImageLandscape) {
+    // Sensor horizontal en teléfono vertical: ejes intercambiados
+    const scale = Math.max(screenW / img.height, screenH / img.width);
+    const visibleSensorW = screenH / scale;
+    const visibleSensorH = screenW / scale;
+    const offsetX = (img.width - visibleSensorW) / 2;
+    const offsetY = (img.height - visibleSensorH) / 2;
+
+    return {
+      sx: offsetX + padY * visibleSensorW,
+      sy: offsetY + padX * visibleSensorH,
+      cropW: padH * visibleSensorW,
+      cropH: padW * visibleSensorH,
+      rotateAngle: 90,
+    };
+  }
+
+  const scale = Math.max(screenW / img.width, screenH / img.height);
+  const visibleW = screenW / scale;
+  const visibleH = screenH / scale;
+  const offsetX = (img.width - visibleW) / 2;
+  const offsetY = (img.height - visibleH) / 2;
+
+  let rotateAngle = 0;
+  if (!isScreenPortrait && !isImageLandscape) {
+    // Pantalla horizontal con imagen vertical
+    rotateAngle = 270;
+  }
+
+  return {
+    sx: offsetX + padX * visibleW,
+    sy: offsetY + padY * visibleH,
+    cropW: padW * visibleW,
+    cropH: padH * visibleH,
+    rotateAngle,
+  };
+}
+
+function drawCroppedRegion(canvas, ctx, img, sx, sy, cropW, cropH, rotateAngle) {
+  const ix = Math.floor(Math.max(0, sx));
+  const iy = Math.floor(Math.max(0, sy));
+  const iw = Math.floor(Math.min(cropW, img.width - ix));
+  const ih = Math.floor(Math.min(cropH, img.height - iy));
+
+  if (rotateAngle === 90) {
+    canvas.width = ih;
+    canvas.height = iw;
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, ix, iy, iw, ih, -iw / 2, -ih / 2, iw, ih);
+  } else if (rotateAngle === 270) {
+    canvas.width = ih;
+    canvas.height = iw;
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(img, ix, iy, iw, ih, -iw / 2, -ih / 2, iw, ih);
+  } else {
+    canvas.width = iw;
+    canvas.height = ih;
+    ctx.drawImage(img, ix, iy, iw, ih, 0, 0, iw, ih);
+  }
 }
 
 async function ensureOcrWorker() {
@@ -405,73 +535,22 @@ async function captureNativeFrame() {
   return sample.value;
 }
 
-function cropToViewfinder(base64Image) {
+function cropImage(base64Image, cropSpec) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const isScreenPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
-      const isImagePortrait = img.width < img.height;
-      
-      let cropW, cropH;
-      let rotateAngle = 0; // 0, 90, 270
-
-      if (isScreenPortrait) {
-        if (isImagePortrait) {
-          // Caso A: Pantalla vertical, Imagen ya vertical (pre-rotada por el plugin)
-          // El visor ocupa el ~90% del ancho y ~22% del alto
-          cropW = Math.floor(img.width * 0.90);
-          cropH = Math.floor(img.height * 0.22);
-          rotateAngle = 0;
-        } else {
-          // Caso B: Pantalla vertical, Imagen horizontal (sensor crudo de cámara)
-          // El ancho del visor en pantalla (90%) mapea al eje Y del sensor (height)
-          // El alto del visor en pantalla (22%) mapea al eje X del sensor (width)
-          cropW = Math.floor(img.width * 0.22);
-          cropH = Math.floor(img.height * 0.90);
-          rotateAngle = 90; // Rotar 90° horario para que la salida quede horizontal
-        }
-      } else {
-        // Pantalla horizontal (Landscape)
-        if (isImagePortrait) {
-          // Caso C: Pantalla horizontal, Imagen vertical
-          cropW = Math.floor(img.width * 0.25);
-          cropH = Math.floor(img.height * 0.90);
-          rotateAngle = 270;
-        } else {
-          // Caso D: Pantalla horizontal, Imagen horizontal
-          cropW = Math.floor(img.width * 0.90);
-          cropH = Math.floor(img.height * 0.25);
-          rotateAngle = 0;
-        }
-      }
-
-      const sx = Math.floor((img.width - cropW) / 2);
-      const sy = Math.floor((img.height - cropH) / 2);
-
       const ctx = canvas.getContext('2d');
-
-      if (rotateAngle === 90) {
-        // Rotar 90° horario: el ancho de la salida es cropH, el alto es cropW
-        canvas.width = cropH;
-        canvas.height = cropW;
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((90 * Math.PI) / 180);
-        ctx.drawImage(img, sx, sy, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
-      } else if (rotateAngle === 270) {
-        // Rotar 270° horario: el ancho de la salida es cropH, el alto es cropW
-        canvas.width = cropH;
-        canvas.height = cropW;
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((270 * Math.PI) / 180);
-        ctx.drawImage(img, sx, sy, cropW, cropH, -cropW / 2, -cropH / 2, cropW, cropH);
-      } else {
-        // Sin rotación
-        canvas.width = cropW;
-        canvas.height = cropH;
-        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
-      }
-
+      drawCroppedRegion(
+        canvas,
+        ctx,
+        img,
+        cropSpec.sx,
+        cropSpec.sy,
+        cropSpec.cropW,
+        cropSpec.cropH,
+        cropSpec.rotateAngle || 0
+      );
       resolve(canvasToBase64(canvas));
     };
     img.onerror = () => resolve(base64Image);
@@ -479,8 +558,59 @@ function cropToViewfinder(base64Image) {
   });
 }
 
-// Preprocesamiento de imagen para mejorar OCR en patentes con bajo contraste
-// (fondo rojo/bordó con letras blancas de las patentes antiguas)
+function getViewfinderCropSpec(img) {
+  if (viewfinderBoxEl) {
+    return mapViewfinderToSensorCrop(img, getBoxRect(viewfinderBoxEl));
+  }
+
+  const isScreenPortrait = getScreenSize().height > getScreenSize().width;
+  const isImageLandscape = img.width > img.height;
+  if (isScreenPortrait && isImageLandscape) {
+    return {
+      sx: img.width * 0.30,
+      sy: img.height * 0.05,
+      cropW: img.width * 0.40,
+      cropH: img.height * 0.90,
+      rotateAngle: 90,
+    };
+  }
+
+  return {
+    sx: img.width * 0.05,
+    sy: img.height * 0.30,
+    cropW: img.width * 0.90,
+    cropH: img.height * 0.40,
+    rotateAngle: 0,
+  };
+}
+
+function cropToViewfinder(base64Image) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = async () => {
+      const crop = getViewfinderCropSpec(img);
+      resolve(await cropImage(base64Image, crop));
+    };
+    img.onerror = () => resolve(base64Image);
+    img.src = 'data:image/jpeg;base64,' + base64Image;
+  });
+}
+
+// Recorte del visor sin rotar en canvas (ML Kit rota con el parámetro rotation).
+function cropToViewfinderRaw(base64Image) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = async () => {
+      const crop = getViewfinderCropSpec(img);
+      resolve(await cropImage(base64Image, { ...crop, rotateAngle: 0 }));
+    };
+    img.onerror = () => resolve(base64Image);
+    img.src = 'data:image/jpeg;base64,' + base64Image;
+  });
+}
+
+// Preprocesamiento de imagen para mejorar OCR.
+// invert=true convierte letras blancas sobre fondo oscuro → negro sobre blanco (ideal para OCR).
 function preprocessForOcr(base64Image, invert = false) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -519,7 +649,7 @@ function preprocessForOcr(base64Image, invert = false) {
           if (gray < 0) gray = 0;
           if (gray > 255) gray = 255;
 
-          // Invertir si se solicita (para patentes oscuras sobre claro)
+          // Invertir: letras blancas sobre fondo negro/rojo → negro sobre blanco
           if (invert) {
             gray = 255 - gray;
           }
@@ -540,14 +670,100 @@ function preprocessForOcr(base64Image, invert = false) {
   });
 }
 
-async function recognizeWithMlKit(base64Image) {
+// Escala x2 sin suavizado: mejora lectura de patentes legacy en recortes chicos
+function upscaleForOcr(base64Image, factor = 2) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(img.width * factor);
+      canvas.height = Math.floor(img.height * factor);
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvasToBase64(canvas));
+    };
+    img.onerror = () => resolve(base64Image);
+    img.src = 'data:image/jpeg;base64,' + base64Image;
+  });
+}
+
+async function recognizeWithMlKit(base64Image, rotation = 0) {
   const result = await CapacitorPluginMlKitTextRecognition.detectText({
     base64Image: stripBase64(base64Image),
-    rotation: 0, // La imagen recortada por cropToViewfinder ya está rotada y orientada correctamente
+    rotation,
   });
-  lastRawText = result.text || '';
+  const rawText = result.text || '';
   const plate = extractPlateFromMlKitResult(result);
-  return { plate, rawText: lastRawText, mlResult: result };
+  return {
+    plate,
+    rawText,
+    score: plate ? scorePlate(plate) : 0,
+    mlResult: result,
+  };
+}
+
+function pickBestOcrResult(results) {
+  let best = { plate: null, rawText: '', score: 0 };
+  for (const result of results) {
+    if (!result) continue;
+    if (result.rawText && !best.rawText) best.rawText = result.rawText;
+    if (result.plate && result.score > best.score) {
+      best = result;
+    }
+  }
+  if (!best.rawText) {
+    for (const result of results) {
+      if (result?.rawText) {
+        best.rawText = result.rawText;
+        break;
+      }
+    }
+  }
+  lastRawText = best.rawText;
+  return best;
+}
+
+const PLATE_SCORE_GOOD = 90;
+
+function finalizeOcrBest(best) {
+  lastRawText = best.rawText;
+  return best;
+}
+
+// Escaneo en fases con corte temprano: evita 11 llamadas paralelas a ML Kit.
+async function recognizeNativeFrame(base64Raw) {
+  const isPortrait = getScreenSize().height > getScreenSize().width;
+  const rot = isPortrait ? 90 : 0;
+  let best = { plate: null, rawText: '', score: 0 };
+
+  const tryOne = async (image, rotation = 0) => {
+    const r = await recognizeWithMlKit(image, rotation);
+    if (r.rawText && !best.rawText) best.rawText = r.rawText;
+    if (r.plate && r.score > best.score) {
+      best = { plate: r.plate, rawText: r.rawText || best.rawText, score: r.score };
+    }
+    return best.score >= PLATE_SCORE_GOOD;
+  };
+
+  const cropped = await cropToViewfinder(base64Raw);
+
+  // Fase 1: recorte del visor (caso más común, ~1-3 s)
+  if (await tryOne(cropped, 0)) return finalizeOcrBest(best);
+  if (await tryOne(await upscaleForOcr(cropped, 2), 0)) return finalizeOcrBest(best);
+  if (await tryOne(await preprocessForOcr(cropped, false), 0)) return finalizeOcrBest(best);
+  if (await tryOne(await preprocessForOcr(cropped, true), 0)) return finalizeOcrBest(best);
+
+  // Fase 2: recorte con rotación nativa de ML Kit
+  const croppedRaw = await cropToViewfinderRaw(base64Raw);
+  if (await tryOne(croppedRaw, rot)) return finalizeOcrBest(best);
+  if (await tryOne(await upscaleForOcr(croppedRaw, 2), rot)) return finalizeOcrBest(best);
+
+  // Fase 3: frame completo (último recurso)
+  if (await tryOne(base64Raw, rot)) return finalizeOcrBest(best);
+  await tryOne(await preprocessForOcr(base64Raw, true), rot);
+
+  return finalizeOcrBest(best);
 }
 
 async function recognizeWithTesseract(canvas) {
@@ -604,6 +820,7 @@ export async function startCameraPreview(boxEl) {
     enableZoom: true,
   });
 
+  viewfinderBoxEl = boxEl || document.getElementById('camera-preview-box');
   previewActive = true;
   return true;
 }
@@ -633,6 +850,7 @@ export async function stopCamera(stream, videoEl) {
       /* ignore */
     }
     previewActive = false;
+    viewfinderBoxEl = null;
   }
   if (stream) {
     stream.getTracks().forEach((track) => track.stop());
@@ -694,48 +912,11 @@ function canvasToBase64(canvas) {
 export async function recognizePlateFromVideo(videoEl, canvasEl) {
   if (previewActive) {
     const base64Raw = await captureNativeFrame();
-    const base64Cropped = await cropToViewfinder(base64Raw);
-
-    // Intento 1: imagen con preprocesamiento (escala de grises + alto contraste)
-    const processed = await preprocessForOcr(base64Cropped, false);
-    const result1 = await recognizeWithMlKit(processed);
-    if (result1.plate && scorePlate(result1.plate) >= 90) {
-      return {
-        plate: result1.plate,
-        display: formatPlateDisplay(result1.plate),
-        rawText: result1.rawText,
-      };
-    }
-
-    // Intento 2: imagen original sin preprocesar (a veces ML Kit lee mejor sin filtros)
-    const result2 = await recognizeWithMlKit(base64Cropped);
-    if (result2.plate && scorePlate(result2.plate) > scorePlate(result1.plate || '')) {
-      return {
-        plate: result2.plate,
-        display: formatPlateDisplay(result2.plate),
-        rawText: result2.rawText,
-      };
-    }
-
-    // Intento 3: imagen invertida (para patentes con letras oscuras sobre fondo claro)
-    if (!result1.plate && !result2.plate) {
-      const inverted = await preprocessForOcr(base64Cropped, true);
-      const result3 = await recognizeWithMlKit(inverted);
-      if (result3.plate) {
-        return {
-          plate: result3.plate,
-          display: formatPlateDisplay(result3.plate),
-          rawText: result3.rawText,
-        };
-      }
-    }
-
-    // Devolver el mejor resultado que tengamos
-    const best = (result1.plate ? result1 : result2);
+    const best = await recognizeNativeFrame(base64Raw);
     return {
       plate: best.plate,
       display: best.plate ? formatPlateDisplay(best.plate) : null,
-      rawText: best.rawText || result1.rawText,
+      rawText: best.rawText,
     };
   }
 
