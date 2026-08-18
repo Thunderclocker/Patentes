@@ -17,6 +17,16 @@ buildscript {
 
 apply from: "variables.gradle"
 
+// OneDrive puede bloquear archivos temporales de Gradle en Windows. El script
+// de build define esta ruta fuera de la carpeta sincronizada.
+def externalBuildDir = System.getenv('ESTACIONASCAN_BUILD_DIR')
+if (externalBuildDir) {
+    rootProject.layout.buildDirectory.set(file("${externalBuildDir}/root"))
+    subprojects {
+        layout.buildDirectory.set(file("${externalBuildDir}/${project.name}"))
+    }
+}
+
 allprojects {
     repositories {
         google()

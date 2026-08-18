@@ -3,11 +3,15 @@
   "version": "2.1.0",
   "description": "Control de estacionamiento - APK Android con OCR ML Kit y linterna",
   "scripts": {
+    "doctor": "node scripts/doctor.js",
+    "test": "node test-comprehensive.mjs",
+    "test:exploratory": "node test-plates.mjs",
     "build:web": "node scripts/prepare-www.js",
+    "start": "npm run build:web && node scripts/serve.js",
     "cap:sync": "npm run build:web && npx cap sync android",
     "cap:open": "npx cap open android",
-    "android:build": "cd android && ./gradlew assembleDebug",
-    "android:apk": "npm run cap:sync && npm run android:build"
+    "android:build": "node scripts/build-apk.js --gradle-only",
+    "android:apk": "node scripts/build-apk.js"
   },
   "dependencies": {
     "@capacitor-community/camera-preview": "^7.0.5",
