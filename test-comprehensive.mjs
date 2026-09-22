@@ -29,20 +29,15 @@ const window = {
 
 ${scannerCode}
 
-// Exponemos las funciones al scope global
 globalThis.extractPlate = extractPlate;
 globalThis.tryCorrectPlate = tryCorrectPlate;
 globalThis.normalizePlate = normalizePlate;
 globalThis.scorePlate = scorePlate;
 `;
 
-// Ejecutamos el setup
 new Function(mockSetup)();
 
 const testCases = [
-  // ==========================================
-  // FORMATO LEGACY (3 Letras + 3 Números)
-  // ==========================================
   { input: 'AAA 123', expected: 'AAA123', desc: 'Legacy perfecto con espacio' },
   { input: 'AAA123', expected: 'AAA123', desc: 'Legacy perfecto sin espacio' },
   { input: 'AAA\n123', expected: 'AAA123', desc: 'Legacy partido en dos líneas' },
@@ -56,10 +51,6 @@ const testCases = [
   { input: 'AI1 123', expected: 'AII123', desc: 'Letra leída como número (1 -> I)' },
   { input: 'ARGENTINA\nNOC 679\nFord', expected: 'NOC679', desc: 'Legacy con ruidos de marca y país' },
   { input: 'TITANIUM\nNVW 345', expected: 'NVW345', desc: 'Legacy con ruido de gama de auto' },
-
-  // ==========================================
-  // FORMATO MERCOSUR (2 Letras + 3 Números + 2 Letras)
-  // ==========================================
   { input: 'AB 123 CD', expected: 'AB123CD', desc: 'Mercosur perfecto con espacios' },
   { input: 'AB123CD', expected: 'AB123CD', desc: 'Mercosur perfecto sin espacios' },
   { input: 'AB\n123\nCD', expected: 'AB123CD', desc: 'Mercosur partido en tres líneas' },
@@ -70,10 +61,6 @@ const testCases = [
   { input: 'AB 1G3 CD', expected: 'AB103CD', desc: 'Número leído como letra en Mercosur (G -> 0)' },
   { input: 'A8 1Z3 CD', expected: 'AB123CD', desc: 'Múltiples errores (8->B, Z->2)' },
   { input: 'MERCOSUR\nAB 123 CD\nTOYOTA', expected: 'AB123CD', desc: 'Mercosur con ruido de portapatente y marca' },
-
-  // ==========================================
-  // FORMATO MOTOS (Mercosur: A000AAA / Legacy: 123AAA)
-  // ==========================================
   { input: 'A 023 AAA', expected: 'A023AAA', desc: 'Moto Mercosur perfecta con espacios' },
   { input: 'A G23 AAA', expected: 'A023AAA', desc: 'Moto Mercosur con G leída como 0 (A G23 AAA -> A023AAA)' },
   { input: '123 AAA', expected: '123AAA', desc: 'Moto Legacy perfecta' },
@@ -97,6 +84,26 @@ for (const { input, expected, desc } of testCases) {
     console.log(`   - Entrada: "${input.replace(/\n/g, '\\n')}"`);
     console.log(`   - Obtenido: ${result ? `"${result}"` : 'null'}`);
     console.log(`   - Esperado: "${expected}"`);
+    failed++;
+  }
+}
+
+// Regresión de seguridad: los datos persistidos de la ronda no deben volver a interpolarse como HTML.
+const appHtml = fs.readFileSync('control_de_estacionamiento.html', 'utf8');
+const renderMatch = appHtml.match(/function renderizarRegistros\(\)\s*\{([\s\S]*?)\n\s*\/\/ Eliminar fila de la lista/);
+if (!renderMatch) {
+  console.log('❌ [FALLÓ] No se pudo localizar renderizarRegistros()');
+  failed++;
+} else {
+  const renderBody = renderMatch[1];
+  const renderSeguro = renderBody.includes('.textContent =') &&
+    renderBody.includes("addEventListener('click'") &&
+    !renderBody.includes('tr.innerHTML');
+  if (renderSeguro) {
+    console.log('✅ [OK] Render de registros usa nodos/textContent y no interpola la fila con tr.innerHTML');
+    passed++;
+  } else {
+    console.log('❌ [FALLÓ] Regresión: renderizarRegistros() volvió a usar una construcción insegura');
     failed++;
   }
 }
