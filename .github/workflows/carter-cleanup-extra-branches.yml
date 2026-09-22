@@ -1,0 +1,33 @@
+name: Carter cleanup extra branches
+
+on:
+  push:
+    branches:
+      - carter/fix-estacionascan-20260922
+    paths:
+      - .github/workflows/carter-cleanup-extra-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete extra Carter branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in \
+            "recovery/control-estacionamiento-6c6229a" \
+            "repair/restore-control-estacionamiento"
+          do
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}"
+              echo "Deleted ${branch}"
+            else
+              echo "Already absent: ${branch}"
+            fi
+          done
