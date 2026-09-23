@@ -5,6 +5,7 @@ import {
   projectExportRow,
   normalizeFloorForEstadias,
   normalizeIdentifier,
+  translateFormulaRows,
   assertSafeOutputPath
 } from './estadias-import-core.mjs';
 
@@ -28,6 +29,11 @@ assert.throws(() => normalizeFloorForEstadias('P5'), /Piso no reconocido/);
 assert.equal(normalizeIdentifier('28 NEOSTAR'), '28NEOSTAR');
 assert.equal(normalizeIdentifier('5ENN'), '5ENN');
 assert.equal(normalizeIdentifier('S/P TOYOTA YARIS'), 'S/PTOYOTAYARIS');
+
+assert.equal(translateFormulaRows('=A2812&"-"&$B2812+C$7+$D$9', 1), '=A2813&"-"&$B2813+C$7+$D$9');
+assert.equal(translateFormulaRows('=IF(H2812="",J2812,H2812)', 2), '=IF(H2814="",J2814,H2814)');
+assert.throws(() => translateFormulaRows('=A1', -1), /fila inválida/);
+assert.throws(() => translateFormulaRows('A1', 1), /empiece con =/);
 
 assert.doesNotThrow(() => assertSafeOutputPath('ESTADIAS_CORPORATE_2026_V5.xlsx', 'ESTADIAS_CORPORATE_2026_V5_PRUEBA.xlsx'));
 assert.throws(
