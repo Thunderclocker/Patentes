@@ -40,6 +40,7 @@ assert.equal(translateFormulaRows('=IF(A2812="A2812",B2812,"C99")', 1), '=IF(A28
 assert.equal(translateFormulaRows('=A2812&"texto ""B77"""&C2812', 1), '=A2813&"texto ""B77"""&C2813');
 assert.equal(translateFormulaRows("='CONTROL A1'!B2812+'O''Brien C7'!D2812", 1), "='CONTROL A1'!B2813+'O''Brien C7'!D2813");
 assert.equal(translateFormulaRows('=LOG10(A2812)+B2812', 1), '=LOG10(A2813)+B2813');
+assert.equal(translateFormulaRows('=XFD2812+XFE2812+ZZZ99', 1), '=XFD2813+XFE2812+ZZZ99');
 assert.throws(() => translateFormulaRows('=A1', -1), /fila inválida/);
 assert.throws(() => translateFormulaRows('A1', 1), /empiece con =/);
 
