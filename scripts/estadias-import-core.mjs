@@ -57,7 +57,8 @@ export function translateFormulaRows(formula, rowDelta) {
   let codeStart = 0;
   let index = 0;
   while (index < formula.length) {
-    if (formula[index] !== '"') {
+    const quote = formula[index];
+    if (quote !== '"' && quote !== "'") {
       index += 1;
       continue;
     }
@@ -66,11 +67,11 @@ export function translateFormulaRows(formula, rowDelta) {
     const literalStart = index;
     index += 1;
     while (index < formula.length) {
-      if (formula[index] !== '"') {
+      if (formula[index] !== quote) {
         index += 1;
         continue;
       }
-      if (formula[index + 1] === '"') {
+      if (formula[index + 1] === quote) {
         index += 2;
         continue;
       }
