@@ -116,7 +116,11 @@ export function translateFormulaRows(formula, rowDelta) {
 
 export function assertSafeOutputPath(inputPath, outputPath) {
   if (!inputPath || !outputPath) throw new Error('Se requieren inputPath y outputPath');
-  if (String(inputPath) === String(outputPath)) {
+  if (pathIdentity(inputPath) === pathIdentity(outputPath)) {
     throw new Error('La salida debe ser una copia distinta; no se permite sobrescribir el libro vigente');
   }
+}
+
+function pathIdentity(value) {
+  return String(value).replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase();
 }
