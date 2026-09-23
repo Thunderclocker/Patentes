@@ -80,10 +80,13 @@ const nuevaRondaMatch = appHtml.match(/function nuevaRonda\(\)\s*\{([\s\S]*?)\n\
 if (!nuevaRondaMatch) { console.log('❌ [FALLÓ] No se pudo localizar nuevaRonda()'); failed++; }
 else {
   const nuevaRondaBody = nuevaRondaMatch[1];
-  const escribeBackup = /localStorage\.setItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i.test(nuevaRondaBody);
-  const verificaBackup = /localStorage\.getItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i.test(nuevaRondaBody);
-  const borraActiva = /localStorage\.removeItem\(\s*['"]ronda_estacionamiento['"]\s*\)/.test(nuevaRondaBody);
-  if (escribeBackup && verificaBackup && borraActiva) { console.log('✅ [OK] nuevaRonda conserva y verifica una copia recuperable antes de limpiar la ronda activa'); passed++; }
+  const backupSetMatch = nuevaRondaBody.match(/localStorage\.setItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i);
+  const backupGetMatch = nuevaRondaBody.match(/localStorage\.getItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i);
+  const activeRemoveMatch = nuevaRondaBody.match(/localStorage\.removeItem\(\s*['"]ronda_estacionamiento['"]\s*\)/);
+  const ordenSeguro = backupSetMatch && backupGetMatch && activeRemoveMatch
+    && backupSetMatch.index < backupGetMatch.index
+    && backupGetMatch.index < activeRemoveMatch.index;
+  if (ordenSeguro) { console.log('✅ [OK] nuevaRonda conserva y verifica una copia recuperable antes de limpiar la ronda activa'); passed++; }
   else { console.log('❌ [FALLÓ] Integridad: nuevaRonda debe guardar y verificar una copia recuperable antes de borrar ronda_estacionamiento'); failed++; }
 }
 
