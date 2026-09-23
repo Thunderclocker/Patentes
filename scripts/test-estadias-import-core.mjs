@@ -32,6 +32,8 @@ assert.equal(normalizeIdentifier('S/P TOYOTA YARIS'), 'S/PTOYOTAYARIS');
 
 assert.equal(translateFormulaRows('=A2812&"-"&$B2812+C$7+$D$9', 1), '=A2813&"-"&$B2813+C$7+$D$9');
 assert.equal(translateFormulaRows('=IF(H2812="",J2812,H2812)', 2), '=IF(H2814="",J2814,H2814)');
+assert.equal(translateFormulaRows('=IF(A2812="A2812",B2812,"C99")', 1), '=IF(A2813="A2812",B2813,"C99")');
+assert.equal(translateFormulaRows('=A2812&"texto ""B77"""&C2812', 1), '=A2813&"texto ""B77"""&C2813');
 assert.throws(() => translateFormulaRows('=A1', -1), /fila inválida/);
 assert.throws(() => translateFormulaRows('A1', 1), /empiece con =/);
 
