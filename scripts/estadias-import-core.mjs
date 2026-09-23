@@ -46,7 +46,7 @@ function isExcelColumn(column) {
 }
 
 function translateFormulaSegment(segment, rowDelta) {
-  return segment.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Z0-9_.(])/g, (match, column, absoluteRow, rowText) => {
+  return segment.replace(/(?<![A-Z0-9_.])(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Z0-9_.(])/g, (match, column, absoluteRow, rowText) => {
     if (!isExcelColumn(column) || absoluteRow === '$') return match;
     const translated = Number(rowText) + rowDelta;
     if (translated < 1) throw new Error(`La traducción produce una fila inválida: ${translated}`);
