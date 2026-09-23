@@ -91,7 +91,8 @@ else {
 }
 
 // Regresión de recuperación: la copia debe poder restaurarse explícitamente sin pisar una ronda activa.
-const restaurarMatch = appHtml.match(/function restaurarUltimaRonda\(\)\s*\{([\s\S]*?)\n\s*\}/);
+// Delimitamos contra el mismo marcador estable de la función siguiente para incluir guardas/if internos completos.
+const restaurarMatch = appHtml.match(/function restaurarUltimaRonda\(\)\s*\{([\s\S]*?)\n\s*\}\n\s*\n\s*\/\/ Función del cartel/);
 if (!restaurarMatch) { console.log('❌ [FALLÓ] Recuperación: falta una acción explícita restaurarUltimaRonda()'); failed++; }
 else {
   const restaurarBody = restaurarMatch[1];
