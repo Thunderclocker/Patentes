@@ -75,8 +75,8 @@ else {
 }
 
 // Regresión de integridad: una ronda activa no puede ser la única copia al iniciar una nueva ronda.
-// El contrato exige copiarla a una clave separada y verificar esa copia antes de borrar ronda_estacionamiento.
-const nuevaRondaMatch = appHtml.match(/function nuevaRonda\(\)\s*\{([\s\S]*?)\n\s*\}/);
+// Delimitamos la función por el comentario estable que inicia la función siguiente para no cortar en el primer bloque if interno.
+const nuevaRondaMatch = appHtml.match(/function nuevaRonda\(\)\s*\{([\s\S]*?)\n\s*\}\n\s*\n\s*\/\/ Función del cartel/);
 if (!nuevaRondaMatch) { console.log('❌ [FALLÓ] No se pudo localizar nuevaRonda()'); failed++; }
 else {
   const nuevaRondaBody = nuevaRondaMatch[1];
