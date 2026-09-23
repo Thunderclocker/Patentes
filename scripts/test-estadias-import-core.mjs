@@ -17,6 +17,10 @@ assert.deepEqual(projectExportRow(
 ), ['18/08/2026', '23:10', 'AA386RZ', 'P3', '12', 'YARIS', 'Blanco']);
 
 assert.throws(() => buildHeaderMap(['Fecha', 'Hora']), /Faltan encabezados requeridos/);
+assert.throws(
+  () => buildHeaderMap(['Fecha', 'Hora', 'Patente', 'Piso', 'Dársena', 'Modelo', 'Color', ' patente ']),
+  /Encabezado duplicado:  patente /
+);
 
 assert.equal(normalizeFloorForEstadias('EP'), 'EP');
 assert.equal(normalizeFloorForEstadias('P1'), '1');
