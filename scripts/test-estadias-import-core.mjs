@@ -53,6 +53,14 @@ assert.throws(
   () => assertSafeOutputPath('ESTADIAS_CORPORATE_2026_V5.xlsx', 'ESTADIAS_CORPORATE_2026_V5.xlsx'),
   /no se permite sobrescribir/
 );
+assert.throws(
+  () => assertSafeOutputPath('C:\\Trabajo\\ESTADIAS.xlsx', 'c:/trabajo/estadias.xlsx'),
+  /no se permite sobrescribir/
+);
+assert.throws(
+  () => assertSafeOutputPath('/tmp/ESTADIAS.xlsx/', '/tmp/estadias.xlsx'),
+  /no se permite sobrescribir/
+);
 
 assert.deepEqual(EXPORT_HEADERS, ['Fecha', 'Hora', 'Patente', 'Piso', 'Dársena', 'Modelo', 'Color']);
 console.log('✓ Contrato base EstacionaScan → ESTADIAS validado');
