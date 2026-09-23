@@ -54,6 +54,18 @@ function translateFormulaSegment(segment, rowDelta) {
   });
 }
 
+function findMatchingBracket(formula, start) {
+  let depth = 0;
+  for (let index = start; index < formula.length; index += 1) {
+    if (formula[index] === '[') depth += 1;
+    else if (formula[index] === ']') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
 export function translateFormulaRows(formula, rowDelta) {
   if (typeof formula !== 'string' || !formula.startsWith('=')) {
     throw new TypeError('formula debe ser una fórmula Excel que empiece con =');
@@ -68,7 +80,7 @@ export function translateFormulaRows(formula, rowDelta) {
     if (opener === '[') {
       result += translateFormulaSegment(formula.slice(codeStart, index), rowDelta);
       const literalStart = index;
-      const close = formula.indexOf(']', index + 1);
+      const close = findMatchingBracket(formula, index);
       index = close === -1 ? formula.length : close + 1;
       result += formula.slice(literalStart, index);
       codeStart = index;
