@@ -36,6 +36,20 @@ export function normalizeIdentifier(value) {
   return String(value ?? '').trim().replace(/\s+/g, '');
 }
 
+export function translateFormulaRows(formula, rowDelta) {
+  if (typeof formula !== 'string' || !formula.startsWith('=')) {
+    throw new TypeError('formula debe ser una fórmula Excel que empiece con =');
+  }
+  if (!Number.isInteger(rowDelta)) throw new TypeError('rowDelta debe ser entero');
+
+  return formula.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, column, absoluteRow, rowText) => {
+    if (absoluteRow === '$') return match;
+    const translated = Number(rowText) + rowDelta;
+    if (translated < 1) throw new Error(`La traducción produce una fila inválida: ${translated}`);
+    return `${column}${translated}`;
+  });
+}
+
 export function assertSafeOutputPath(inputPath, outputPath) {
   if (!inputPath || !outputPath) throw new Error('Se requieren inputPath y outputPath');
   if (String(inputPath) === String(outputPath)) {
