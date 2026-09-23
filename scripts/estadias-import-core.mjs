@@ -9,7 +9,9 @@ export function buildHeaderMap(headerRow) {
   const positions = new Map();
   headerRow.forEach((value, index) => {
     const key = canonicalHeader(value);
-    if (key) positions.set(key, index);
+    if (!key) return;
+    if (positions.has(key)) throw new Error(`Encabezado duplicado: ${value}`);
+    positions.set(key, index);
   });
 
   const missing = EXPORT_HEADERS.filter(h => !positions.has(canonicalHeader(h)));
