@@ -4,7 +4,7 @@
   "description": "Control de estacionamiento - APK Android con OCR ML Kit y linterna",
   "scripts": {
     "doctor": "node scripts/doctor.js",
-    "test": "node test-comprehensive.mjs && node scripts/test-round-recovery-patch.mjs",
+    "test": "node test-comprehensive.mjs && node scripts/test-round-recovery-patch.mjs && node scripts/test-estadias-import-core.mjs",
     "test:exploratory": "node test-plates.mjs",
     "build:web": "node scripts/prepare-www.js",
     "start": "npm run build:web && node scripts/serve.js",
