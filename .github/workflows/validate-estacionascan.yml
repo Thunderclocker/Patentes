@@ -1,0 +1,21 @@
+name: Validate EstacionaScan
+on:
+  push:
+    branches:
+      - carter/fix-estacionascan-20260922
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: carter/fix-estacionascan-20260922
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run doctor
+      - run: npm test
+      - run: npm run build:web
