@@ -36,18 +36,50 @@ export function normalizeIdentifier(value) {
   return String(value ?? '').trim().replace(/\s+/g, '');
 }
 
+function translateFormulaSegment(segment, rowDelta) {
+  return segment.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, column, absoluteRow, rowText) => {
+    if (absoluteRow === '$') return match;
+    const translated = Number(rowText) + rowDelta;
+    if (translated < 1) throw new Error(`La traducción produce una fila inválida: ${translated}`);
+    return `${column}${translated}`;
+  });
+}
+
 export function translateFormulaRows(formula, rowDelta) {
   if (typeof formula !== 'string' || !formula.startsWith('=')) {
     throw new TypeError('formula debe ser una fórmula Excel que empiece con =');
   }
   if (!Number.isInteger(rowDelta)) throw new TypeError('rowDelta debe ser entero');
 
-  return formula.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (match, column, absoluteRow, rowText) => {
-    if (absoluteRow === '$') return match;
-    const translated = Number(rowText) + rowDelta;
-    if (translated < 1) throw new Error(`La traducción produce una fila inválida: ${translated}`);
-    return `${column}${translated}`;
-  });
+  let result = '';
+  let codeStart = 0;
+  let index = 0;
+  while (index < formula.length) {
+    if (formula[index] !== '"') {
+      index += 1;
+      continue;
+    }
+
+    result += translateFormulaSegment(formula.slice(codeStart, index), rowDelta);
+    const literalStart = index;
+    index += 1;
+    while (index < formula.length) {
+      if (formula[index] !== '"') {
+        index += 1;
+        continue;
+      }
+      if (formula[index + 1] === '"') {
+        index += 2;
+        continue;
+      }
+      index += 1;
+      break;
+    }
+    result += formula.slice(literalStart, index);
+    codeStart = index;
+  }
+
+  return result + translateFormulaSegment(formula.slice(codeStart), rowDelta);
 }
 
 export function assertSafeOutputPath(inputPath, outputPath) {
