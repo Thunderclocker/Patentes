@@ -2,39 +2,25 @@ import fs from 'fs';
 
 // Cargamos directamente las funciones de scanner.js para probar el comportamiento real
 let scannerCode = fs.readFileSync('src/scanner.js', 'utf8');
-
-// Quitamos los imports de arriba (líneas 1 a 6) para poder ejecutarlo en Node
 scannerCode = scannerCode.replace(/import\s+[\s\S]*?from\s+['"].*?['"];/g, '');
-
-// Quitamos las declaraciones "export " para evitar errores de sintaxis
 scannerCode = scannerCode.replace(/\bexport\s+/g, '');
 
-// Creamos mocks para los objetos de Capacitor
 const mockSetup = `
-const Capacitor = {
-  isNativePlatform: () => false
-};
+const Capacitor = { isNativePlatform: () => false };
 const CameraPreview = {};
 const CapacitorPluginMlKitTextRecognition = {};
 const createWorker = () => {};
 const Filesystem = {};
 const Directory = {};
 const Share = {};
-const document = {
-  querySelector: () => null
-};
-const window = {
-  location: { origin: 'http://localhost' }
-};
-
+const document = { querySelector: () => null };
+const window = { location: { origin: 'http://localhost' } };
 ${scannerCode}
-
 globalThis.extractPlate = extractPlate;
 globalThis.tryCorrectPlate = tryCorrectPlate;
 globalThis.normalizePlate = normalizePlate;
 globalThis.scorePlate = scorePlate;
 `;
-
 new Function(mockSetup)();
 
 const testCases = [
@@ -70,47 +56,38 @@ const testCases = [
 console.log('\n==================================================');
 console.log('  EJECUTANDO PRUEBAS DE VERIFICACIÓN DE PATENTES  ');
 console.log('==================================================\n');
-
 let passed = 0;
 let failed = 0;
-
 for (const { input, expected, desc } of testCases) {
   const result = extractPlate(input);
-  if (result === expected) {
-    console.log(`✅ [OK] ${desc}`);
-    passed++;
-  } else {
-    console.log(`❌ [FALLÓ] ${desc}`);
-    console.log(`   - Entrada: "${input.replace(/\n/g, '\\n')}"`);
-    console.log(`   - Obtenido: ${result ? `"${result}"` : 'null'}`);
-    console.log(`   - Esperado: "${expected}"`);
-    failed++;
-  }
+  if (result === expected) { console.log(`✅ [OK] ${desc}`); passed++; }
+  else { console.log(`❌ [FALLÓ] ${desc}`); console.log(`   - Entrada: "${input.replace(/\n/g, '\\n')}"`); console.log(`   - Obtenido: ${result ? `"${result}"` : 'null'}`); console.log(`   - Esperado: "${expected}"`); failed++; }
 }
 
-// Regresión de seguridad: los datos persistidos de la ronda no deben volver a interpolarse como HTML.
 const appHtml = fs.readFileSync('control_de_estacionamiento.html', 'utf8');
 const renderMatch = appHtml.match(/function renderizarRegistros\(\)\s*\{([\s\S]*?)\n\s*\/\/ Eliminar fila de la lista/);
-if (!renderMatch) {
-  console.log('❌ [FALLÓ] No se pudo localizar renderizarRegistros()');
-  failed++;
-} else {
+if (!renderMatch) { console.log('❌ [FALLÓ] No se pudo localizar renderizarRegistros()'); failed++; }
+else {
   const renderBody = renderMatch[1];
-  const renderSeguro = renderBody.includes('.textContent =') &&
-    renderBody.includes("addEventListener('click'") &&
-    !renderBody.includes('tr.innerHTML');
-  if (renderSeguro) {
-    console.log('✅ [OK] Render de registros usa nodos/textContent y no interpola la fila con tr.innerHTML');
-    passed++;
-  } else {
-    console.log('❌ [FALLÓ] Regresión: renderizarRegistros() volvió a usar una construcción insegura');
-    failed++;
-  }
+  const renderSeguro = renderBody.includes('.textContent =') && renderBody.includes("addEventListener('click'") && !renderBody.includes('tr.innerHTML');
+  if (renderSeguro) { console.log('✅ [OK] Render de registros usa nodos/textContent y no interpola la fila con tr.innerHTML'); passed++; }
+  else { console.log('❌ [FALLÓ] Regresión: renderizarRegistros() volvió a usar una construcción insegura'); failed++; }
+}
+
+// Regresión de integridad: una ronda activa no puede ser la única copia al iniciar una nueva ronda.
+// El contrato exige copiarla a una clave separada y verificar esa copia antes de borrar ronda_estacionamiento.
+const nuevaRondaMatch = appHtml.match(/function nuevaRonda\(\)\s*\{([\s\S]*?)\n\s*\}/);
+if (!nuevaRondaMatch) { console.log('❌ [FALLÓ] No se pudo localizar nuevaRonda()'); failed++; }
+else {
+  const nuevaRondaBody = nuevaRondaMatch[1];
+  const escribeBackup = /localStorage\.setItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i.test(nuevaRondaBody);
+  const verificaBackup = /localStorage\.getItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i.test(nuevaRondaBody);
+  const borraActiva = /localStorage\.removeItem\(\s*['"]ronda_estacionamiento['"]\s*\)/.test(nuevaRondaBody);
+  if (escribeBackup && verificaBackup && borraActiva) { console.log('✅ [OK] nuevaRonda conserva y verifica una copia recuperable antes de limpiar la ronda activa'); passed++; }
+  else { console.log('❌ [FALLÓ] Integridad: nuevaRonda debe guardar y verificar una copia recuperable antes de borrar ronda_estacionamiento'); failed++; }
 }
 
 console.log('\n==================================================');
 console.log(`  RESULTADO: ${passed} pasadas, ${failed} falladas  `);
 console.log('==================================================\n');
-if (failed > 0) {
-  process.exit(1);
-}
+if (failed > 0) process.exit(1);
