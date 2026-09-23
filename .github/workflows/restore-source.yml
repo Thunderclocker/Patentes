@@ -1,0 +1,25 @@
+name: Restore EstacionaScan source
+on:
+  push:
+    branches:
+      - carter/fix-estacionascan-20260922
+    paths:
+      - .github/workflows/restore-source.yml
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: carter/fix-estacionascan-20260922
+          fetch-depth: 0
+      - name: Restore known-good source
+        run: |
+          git show c5241e5b72035a8d5552846c4442282e6668146c:control_de_estacionamiento.html > control_de_estacionamiento.html
+          git config user.name "Carter"
+          git config user.email "actions@users.noreply.github.com"
+          git add control_de_estacionamiento.html
+          git commit -m "Restaurar fuente EstacionaScan tras escritura accidental"
+          git push origin HEAD:carter/fix-estacionascan-20260922
