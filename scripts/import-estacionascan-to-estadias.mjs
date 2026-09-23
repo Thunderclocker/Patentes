@@ -37,6 +37,19 @@ for (let r = range.e.r; r >= 0; r -= 1) {
 const sourceFormulaRow = lastDataRow;
 const startRow = lastDataRow + 1;
 
+// Fail closed before writing anything: H:N are derived columns and every one must
+// have a formula on the source row. Otherwise a copy could be generated with
+// silently dead derived cells.
+const missingFormulaCells = [];
+for (let c = 7; c <= 13; c += 1) {
+  const address = XLSX.utils.encode_cell({ r: sourceFormulaRow, c });
+  const source = sheet[address];
+  if (!source || typeof source.f !== 'string' || !source.f.trim()) missingFormulaCells.push(address);
+}
+if (missingFormulaCells.length) {
+  throw new Error(`La fila fuente ${sourceFormulaRow + 1} no tiene fórmulas completas H:N: ${missingFormulaCells.join(', ')}`);
+}
+
 for (let offset = 0; offset < projected.length; offset += 1) {
   const targetRow = startRow + offset;
   projected[offset].forEach((value, c) => {
@@ -44,9 +57,8 @@ for (let offset = 0; offset < projected.length; offset += 1) {
   });
   for (let c = 7; c <= 13; c += 1) {
     const source = sheet[XLSX.utils.encode_cell({ r: sourceFormulaRow, c })];
-    if (!source) continue;
     const target = { ...source };
-    if (typeof source.f === 'string') target.f = translateFormulaRows(`=${source.f}`, targetRow - sourceFormulaRow).slice(1);
+    target.f = translateFormulaRows(`=${source.f}`, targetRow - sourceFormulaRow).slice(1);
     delete target.v;
     delete target.w;
     sheet[XLSX.utils.encode_cell({ r: targetRow, c })] = target;
