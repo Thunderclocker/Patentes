@@ -90,6 +90,23 @@ else {
   else { console.log('❌ [FALLÓ] Integridad: nuevaRonda debe guardar y verificar una copia recuperable antes de borrar ronda_estacionamiento'); failed++; }
 }
 
+// Regresión de recuperación: la copia debe poder restaurarse explícitamente sin pisar una ronda activa.
+const restaurarMatch = appHtml.match(/function restaurarUltimaRonda\(\)\s*\{([\s\S]*?)\n\s*\}/);
+if (!restaurarMatch) { console.log('❌ [FALLÓ] Recuperación: falta una acción explícita restaurarUltimaRonda()'); failed++; }
+else {
+  const restaurarBody = restaurarMatch[1];
+  const backupGet = restaurarBody.match(/localStorage\.getItem\(\s*['"][^'"]*(?:ultima|backup|recuper)[^'"]*['"]/i);
+  const activeGet = restaurarBody.match(/localStorage\.getItem\(\s*['"]ronda_estacionamiento['"]\s*\)/);
+  const activeSet = restaurarBody.match(/localStorage\.setItem\(\s*['"]ronda_estacionamiento['"]/);
+  const protegeActiva = /JSON\.parse[\s\S]*?\.length[\s\S]*?(?:return|throw)/.test(restaurarBody);
+  const ordenRestauracionSeguro = backupGet && activeGet && activeSet
+    && backupGet.index < activeSet.index
+    && activeGet.index < activeSet.index
+    && protegeActiva;
+  if (ordenRestauracionSeguro) { console.log('✅ [OK] restaurarUltimaRonda lee el backup y rechaza sobrescribir una ronda activa no vacía'); passed++; }
+  else { console.log('❌ [FALLÓ] Recuperación: la restauración debe leer backup y ronda activa, bloquear estado activo no vacío y recién después repoblar ronda_estacionamiento'); failed++; }
+}
+
 console.log('\n==================================================');
 console.log(`  RESULTADO: ${passed} pasadas, ${failed} falladas  `);
 console.log('==================================================\n');
