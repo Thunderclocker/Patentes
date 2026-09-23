@@ -64,8 +64,18 @@ export function translateFormulaRows(formula, rowDelta) {
   let codeStart = 0;
   let index = 0;
   while (index < formula.length) {
-    const quote = formula[index];
-    if (quote !== '"' && quote !== "'") {
+    const opener = formula[index];
+    if (opener === '[') {
+      result += translateFormulaSegment(formula.slice(codeStart, index), rowDelta);
+      const literalStart = index;
+      const close = formula.indexOf(']', index + 1);
+      index = close === -1 ? formula.length : close + 1;
+      result += formula.slice(literalStart, index);
+      codeStart = index;
+      continue;
+    }
+
+    if (opener !== '"' && opener !== "'") {
       index += 1;
       continue;
     }
@@ -74,11 +84,11 @@ export function translateFormulaRows(formula, rowDelta) {
     const literalStart = index;
     index += 1;
     while (index < formula.length) {
-      if (formula[index] !== quote) {
+      if (formula[index] !== opener) {
         index += 1;
         continue;
       }
-      if (formula[index + 1] === quote) {
+      if (formula[index + 1] === opener) {
         index += 2;
         continue;
       }
