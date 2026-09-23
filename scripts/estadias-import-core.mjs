@@ -38,9 +38,16 @@ export function normalizeIdentifier(value) {
   return String(value ?? '').trim().replace(/\s+/g, '');
 }
 
+function isExcelColumn(column) {
+  const letters = column.replace('$', '');
+  let number = 0;
+  for (const char of letters) number = number * 26 + char.charCodeAt(0) - 64;
+  return number >= 1 && number <= 16384; // XFD, última columna válida de Excel.
+}
+
 function translateFormulaSegment(segment, rowDelta) {
   return segment.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Z0-9_.(])/g, (match, column, absoluteRow, rowText) => {
-    if (absoluteRow === '$') return match;
+    if (!isExcelColumn(column) || absoluteRow === '$') return match;
     const translated = Number(rowText) + rowDelta;
     if (translated < 1) throw new Error(`La traducción produce una fila inválida: ${translated}`);
     return `${column}${translated}`;
