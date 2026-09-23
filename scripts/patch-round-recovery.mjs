@@ -69,8 +69,8 @@ const logicNew = `        // Iniciar nueva ronda preservando primero una copia r
                 mostrarToast("La ronda activa no se puede validar");
                 return;
             }
-            if (Array.isArray(activa) && activa.length > 0) {
-                mostrarToast("No se puede restaurar con una ronda activa");
+            if (!Array.isArray(activa) || activa.length > 0) {
+                mostrarToast("No se puede restaurar con una ronda activa o inválida");
                 return;
             }
 
