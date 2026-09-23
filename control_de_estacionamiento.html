@@ -268,6 +268,10 @@
                         <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
                         Exportar Excel
                     </button>
+                    <button onclick="restaurarUltimaRonda()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95" title="Restaurar la última ronda cerrada">
+                        <i data-lucide="history" class="w-4 h-4 text-amber-400"></i>
+                        Restaurar
+                    </button>
                     <button onclick="nuevaRonda()" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 text-rose-200 text-xs font-bold py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95" title="Iniciar Nueva Ronda (Borra los registros locales)">
                         <i data-lucide="trash-2" class="w-4 h-4 text-rose-400"></i>
                         Nueva Ronda
@@ -1057,18 +1061,63 @@
             }
         }
 
-        // Iniciar nueva ronda limpiando los registros locales
+        // Iniciar nueva ronda preservando primero una copia recuperable
         function nuevaRonda() {
             if (registros.length === 0) {
                 mostrarToast("El historial ya está vacío");
                 return;
             }
-            if (confirm("¿Estás seguro de iniciar una nueva ronda?\nEsto borrará todos los registros guardados en esta pantalla de forma permanente.")) {
+            if (confirm("¿Estás seguro de iniciar una nueva ronda?\nLa ronda actual quedará disponible como última ronda cerrada.")) {
+                const backup = JSON.stringify(registros);
+                localStorage.setItem('ultima_ronda_estacionamiento', backup);
+                const backupVerificado = localStorage.getItem('ultima_ronda_estacionamiento');
+                if (backupVerificado !== backup) {
+                    mostrarToast("No se pudo guardar la copia de seguridad");
+                    return;
+                }
                 registros = [];
                 localStorage.removeItem('ronda_estacionamiento');
                 renderizarRegistros();
                 mostrarToast("¡Nueva ronda iniciada!");
             }
+        }
+
+        function restaurarUltimaRonda() {
+            const backup = localStorage.getItem('ultima_ronda_estacionamiento');
+            if (!backup) {
+                mostrarToast("No hay una ronda cerrada para restaurar");
+                return;
+            }
+
+            const rondaActiva = localStorage.getItem('ronda_estacionamiento');
+            let activa = [];
+            try {
+                activa = rondaActiva ? JSON.parse(rondaActiva) : [];
+            } catch (e) {
+                mostrarToast("La ronda activa no se puede validar");
+                return;
+            }
+            if (!Array.isArray(activa) || activa.length > 0) {
+                mostrarToast("No se puede restaurar con una ronda activa o inválida");
+                return;
+            }
+
+            let recuperada;
+            try {
+                recuperada = JSON.parse(backup);
+            } catch (e) {
+                mostrarToast("La copia de la última ronda está dañada");
+                return;
+            }
+            if (!Array.isArray(recuperada) || recuperada.length === 0) {
+                mostrarToast("La última ronda guardada está vacía");
+                return;
+            }
+
+            localStorage.setItem('ronda_estacionamiento', backup);
+            registros = recuperada;
+            renderizarRegistros();
+            mostrarToast("Última ronda restaurada");
         }
 
         // Función del cartel de alerta personalizado
